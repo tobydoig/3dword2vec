@@ -4,6 +4,11 @@ dimensionality reduction.
 
  ![Screenshot](screenshot.png)
 
+    Left mouse - rotate
+    Right mouse - move model
+    Mouse wheel - zoom
+    WASD - was meant to move the camera but does weird things (for now)
+
 Google makes a very large pre-trained word2vec file available, with 3m search phrases and each has 300 features (numbers). We use PCA and UMAP to reduce these features to 3 (x, y, z). You can then rotate/zoom the plot and mouse over dots to see the underlying search terms.
 
 Note, we randomly sample a portion of the data because 3m is a bit much. This is governed by the SAMPLE_SIZE parameter and significantly affects the 3d data generation time.
@@ -32,11 +37,6 @@ If you already have the model file downloaded the output will look like:
 
 The output is a file called coords-umap.txt which is actually a JSON file.
 You then open graphit.html with a browser (directly, no need to go a via webserver).
-
-Left mouse - rotate
-Right mouse - move model
-Mouse wheel - zoom
-WASD - was meant to move the camera but does weird things (for now)
 
 # Compare
 For comparison here we use some different algorithms to generate the 3d data points. We also used a smaller sample (2%, about 60k phrases instead of 1m).
