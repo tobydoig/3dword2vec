@@ -1,45 +1,46 @@
 # 3dword2vec
-3d plot of the Google word2vec model using the Uniform Manifold Approximation and Projection algorithm for
-dimensionality reduction.
+3d plot of a word2vec model using [UMAP](https://umap-learn.readthedocs.io/en/latest/) for dimensionality reduction (PCA and T-SNE also supported) and [three.js](https://threejs.org/) for plotting.
 
  ![Screenshot](screenshot.png)
 
-    Left mouse - rotate
-    Right mouse - move model
+    Left drag - rotate
+    Right drag - move model
+    Left click - add keyword label
     Mouse wheel - zoom
     WASD - was meant to move the camera but does weird things (for now)
 
-Google makes a very large pre-trained word2vec file available, with 3m search phrases and each has 300 features (numbers). We use PCA and UMAP to reduce these features to 3 (x, y, z). You can then rotate/zoom the plot and mouse over dots to see the underlying search terms.
+We support the [GoogleNews](https://code.google.com/archive/p/word2vec/) and [FastText](https://fasttext.cc/docs/en/english-vectors.html) models.
 
-Note, we randomly sample a portion of the data because 3m is a bit much. This is governed by the SAMPLE_SIZE parameter and significantly affects the 3d data generation time.
+Note, we randomly sample a portion of the data to reduce the amount being plotted, but also to reduce the overall processing time.
 
 # Install
 Use pip (or your IDE) to install the relevant Python libraries (I'm using python 3 and PyCharm)
 
-    pip3 install umap-learn gensim numpy
+    pip install umap-learn gensim numpy mapplotlib
+
+Note - the umap library is called "umap-learn"
 
 # Run
-First run the python file which will download the Google word2vec model if necessary (first time run). This may take a while as it's 1.5GB.
-Once downloaded we then generate the 3d point data that the graph needs.
+When running it will download (and optionally unzip) the underlying model if it doesn't find it locally. The models can be quite large so be patient.
 
     python w2v.py
 
-If you already have the model file downloaded the output will look like:
+If you already have the model file downloaded the output might look like:
 
-    11:44:04.346393 Found word2vec model GoogleNews-vectors-negative300.bin.gz locally so no need to download
-    11:44:04.346393 Loading model into memory...(a minute or so)
-    11:45:47.328820 Sampling 15.0% the data...
-    11:45:48.136003 Reducing data to 50 features using PCA...(few seconds)
-    11:45:59.029194 Reducing data to 3 features using UMAP...(be patient)
-    12:04:34.328662 Using KMeans to generate 10 groups so the final graph is prettier...
-    12:04:57.411770 Writing data to coords-umap.txt...
-    12:05:01.466036 Finished. Now open graphit.html
+    15:07:48.002947 Downloading model from https://s3-us-west-1.amazonaws.com/fasttext-vectors/wiki-news-300d-1M.vec.zip
+    15:10:32.547626 Unzipping local model archive wiki-news-300d-1M.vec.zip
+    15:10:46.094952 Loading local model wiki-news-300d-1M.vec
+    15:14:24.301819 Sampling 15.0% of 999994 vectors
+    15:14:24.532119 Reducing data to 50 features using PCA (fast)
+    15:14:27.685862 Reducing data to 3 features using UMAP (slow-ish)
+    15:19:04.151343 Using KMeans to generate 10 groups so the final graph is prettier...
+    15:19:12.115986 Writing data to ./keyword-data.js...
+    15:19:13.427344 Finished, now open graphit.html
 
-The output is a file called coords-umap.txt which is actually a JSON file.
-You then open graphit.html with a browser (directly, no need to go a via webserver).
+Open graphit.html with a browser (directly, no need to go a via webserver).
 
 # Compare
-For comparison here we use some different algorithms to generate the 3d data points. We also used a smaller sample (2%, about 60k phrases instead of 1m).
+For comparison here we use some different algorithms to generate the 3d data points from a 2% sampling of the GoogleNews model.
 
 Here we're using PCA to reduce to 50 and then UMAP to 3. This is my favourite reduction as I think it accentuates certain branches.
 

@@ -2,17 +2,28 @@
 <head>
 	<style>
 		body { margin: 0; }
-		canvas { width: 100%; height: 100% }
+		canvas { width: 100%; height: 100%; z-index: 10 }
+		.textlayer { width: 150px; height: 100%; position: absolute; left: 0; top: 0; margin: 0; background-color: #fff; z-index: 20 }
+		.text-label {
+  color: #fff;
+  font-family: "Fira Mono", Monaco, "Andale Mono", "Lucida Console", "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
+  margin: -5px 0 0 15px;
+  pointer-events:none;
+}
 	</style>
-	<script src="coords-umap.txt"></script>
+	<script src="keyword-data.js"></script>
 	<script src="three.min.js"></script>
 	<script src="OrbitControls.js"></script>
 	<script src="Lut.js"></script>
 </head>
 <body>
-<div id="ThreeJS" style="z-index: 1; position: absolute; left:0px; top:0px"></div>
+<ul class="textlayer"></ul>
+<div id="ThreeJS" style="z-index: 1; position: relative; left:0px; top:0px; overflow: hidden"></div>
 <script>
+
 	var container, scene, camera, renderer, controls;
+	var textlayer = document.querySelector('.textlayer');
+	
 	// SCENE
 	scene = new THREE.Scene();
 	var raycaster = new THREE.Raycaster();
@@ -63,6 +74,52 @@
 		new THREE.Color(0x800080),
 		new THREE.Color(0xD2691E)
 	];
+	
+	var labelblobgeom = new THREE.SphereBufferGeometry(POINT_SIZE);
+	var labelblobmat = new THREE.MeshBasicMaterial( { color: 0xffffff });
+	var textlabels = [];
+	
+	function createTextLabel() {
+		//	taken from https://codepen.io/dxinteractive/pen/reNpOR
+		var div = document.createElement('div');
+		div.className = 'text-label';
+		div.style.position = 'absolute';
+		div.style.width = 100;
+		div.style.height = 100;
+		div.innerHTML = "hi there!";
+		div.style.top = -1000;
+		div.style.left = -1000;
+		
+		var _this = this;
+		
+		return {
+		  element: div,
+		  parent: false,
+		  position: new THREE.Vector3(0,0,0),
+		  setHTML: function(html) {
+			this.element.innerHTML = html;
+		  },
+		  setParent: function(threejsobj) {
+			this.parent = threejsobj;
+		  },
+		  updatePosition: function() {
+			if(parent) {
+				let a = points.geometry.getAttribute('position');
+			  this.position.fromBufferAttribute(a, this.parent);
+			}
+			
+			var coords2d = this.get2DCoords(this.position, _this.camera);
+			this.element.style.left = coords2d.x + 'px';
+			this.element.style.top = coords2d.y + 'px';
+		  },
+		  get2DCoords: function(position, camera) {
+			var vector = position.project(camera);
+			vector.x = (vector.x + 1)/2 * window.innerWidth;
+			vector.y = -(vector.y - 1)/2 * window.innerHeight;
+			return vector;
+		  }
+		};
+	  }
 	
 	(function() {
 		//	first normalise our co-ordinates. they're just a bunch of numbers so first let's find the min and max values.
@@ -193,14 +250,23 @@
 		let hits = raycaster.intersectObject(points);
 		if (hits.length) {
 			let hit = hits[0];
-			let ix = hit.index * 3;
 			let a = hit.object.geometry.getAttribute('position');
-			myBall.position.set(a.array[ix], a.array[ix + 1], a.array[ix + 2]);
+			myBall.position.fromBufferAttribute(a, hit.index);
 			lastSelected = hit.index;
 			
 			console.log(W2VDATA[hit.index][0]);
 			
 			picked = true;
+			
+			let tl = createTextLabel();
+			tl.setHTML(W2VDATA[hit.index][0]);
+			tl.setParent(hit.index);
+			textlabels.push(tl);
+			container.appendChild(tl.element);
+			
+			let tb = new THREE.Mesh(labelblobgeom, labelblobmat);
+			tb.position.fromBufferAttribute(a, hit.index);
+			scene.add(tb);
 		} else {
 			myBall.position.set(camera.position.x, camera.position.y, camera.position.z);
 			lastSelected = -1;
@@ -237,10 +303,16 @@
 			//a.needsUpdate = true;
 			
 			let a = hit.object.geometry.getAttribute('position');
-			myBall.position.set(a.array[ix], a.array[ix + 1], a.array[ix + 2]);
+			//myBall.position.set(a.array[ix], a.array[ix + 1], a.array[ix + 2]);
+			myBall.position.fromBufferAttribute(a, hit.index);
 			lastSelected = hit.index;
 			
-			console.log(W2VDATA[hit.index][0]);
+			let li = document.createElement('li');
+			li.innerText = W2VDATA[hit.index][0];
+			textlayer.appendChild(li);
+			if (textlayer.children.length > 20) {
+				textlayer.removeChild(textlayer.firstChild);
+			}
 		} else {
 			myBall.position.set(camera.position.x, camera.position.y, camera.position.z);
 			lastSelected = -1;
@@ -261,6 +333,9 @@
 
 	function render() 
 	{
+		textlabels.forEach((e) => {
+			e.updatePosition();
+		});
 		renderer.render( scene, camera );
 	}
 	

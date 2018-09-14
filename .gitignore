@@ -1,4 +1,6 @@
 .idea
 venv
-GoogleNews-vectors-negative300.bin.gz
-coords-umap.txt
+*.gz
+*.zip
+*.vec
+keyword-data.js
