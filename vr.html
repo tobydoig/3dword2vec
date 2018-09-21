@@ -1,0 +1,360 @@
+<!--
+	webvr being replaced by webxr
+		https://immersive-web.github.io/webxr/
+	
+	mozilla's webxr for three (template for vr)
+		https://mozilla.github.io/three.xr.js/
+	
+	webxr demo from stewart smith (using controllers - which don't work for me - cool, let's fix)
+		https://github.com/moar-tech/spacerocks
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>three.xr.js XR 3dword2vec</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+      body, html {
+        padding: 0;
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <script src="three.min.js"></script>
+    <script src='three.xr.js'></script>
+    <script src='keyword-data.js'></script>
+    <script>
+      var clock = new THREE.Clock();
+
+      var container;
+      var renderer, camera, scene, world;
+
+      // ar, magicWindow, vr
+      var activeRealityType = 'magicWindow';
+
+      THREE.WebXRUtils.getDisplays().then(init);
+
+      function init(displays) {
+	  console.log('init...');
+        container = document.createElement( 'div' );
+        document.body.appendChild( container );
+        
+        scene = new THREE.Scene();
+		
+	  world = new THREE.Object3D();
+	  scene.add(world);
+		
+	// CAMERA
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	
+        camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, -1);
+        world.add( camera );
+        camera.position.set(0, 1, 0);
+        renderer = new THREE.WebGLRenderer( { alpha: true } );
+        renderer.autoClear = false;
+        container.appendChild( renderer.domElement );
+
+//	controls = new THREE.OrbitControls( camera, renderer.domElement );
+//	controls = new THREE.GamepadControls( camera );
+		
+	// how many to spread our the datapoints by which will also impact how big the points are in the graph.
+	// if you pick a MAX_XY too small and it either crashes or looks very blocky/rubbish.
+	// if you pick something bigger then you will also need to increase POINT_SIZE
+	var MAX_XY = 100000;
+	var POINT_SIZE = 128;
+	
+		console.log('geometry');
+	var geometry = new THREE.BufferGeometry();
+	var points;
+	var positions = new Float32Array(W2VDATA.length * 3);
+	var colours = new Float32Array(W2VDATA.length * 3);
+	
+	//	instead of using the lookup table above we can also use the colours below. this is how i started off, the lut above
+	//	was something i added later. not convinced about it though hence not removing either code yet.
+	var palette = [
+		new THREE.Color(0xff0000),
+		new THREE.Color(0x00ff00),
+		new THREE.Color(0x0000ff),
+		new THREE.Color(0xffff00),
+		new THREE.Color(0x00ffff),
+		new THREE.Color(0xC0C0C0),
+		new THREE.Color(0xDAA520),
+		new THREE.Color(0x800000),
+		new THREE.Color(0x800080),
+		new THREE.Color(0xD2691E)
+	];
+	
+	(function() {
+		//	first normalise our co-ordinates. they're just a bunch of numbers so first let's find the min and max values.
+		let min = 999;
+		let max = -999;
+		console.log('points');
+		W2VDATA.forEach((e) => {
+			min = Math.min(min, Math.min(Math.min(e[1], e[2]), e[3]));
+			max = Math.max(max, Math.max(Math.max(e[1], e[2]), e[3]));
+		});
+		
+		//	and now the actualy co-ordinate we store for each point in the graph will be normalised against this diff
+		let diff = max - min;
+		
+		let ix = 0;
+		W2VDATA.forEach((e, i) => {
+			let x = (e[1] - min) / diff;
+			let y = (e[2] - min) / diff;
+			let z = (e[3] - min) / diff;
+			let c = palette[e[4]];	// make sure e[4] is < CLUSTERS (in w2v.py)
+			//let c = lut.getColor(e[4]);
+			
+			positions[ix] = x * MAX_XY;
+			positions[ix + 1] = y * MAX_XY;
+			positions[ix + 2] = z * MAX_XY;
+			
+			colours[ix] = c.r;
+			colours[ix + 1] = c.g;
+			colours[ix + 2] = c.b;
+			
+			ix += 3;
+		});
+		
+		geometry.addAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+		geometry.addAttribute( 'color', new THREE.Float32BufferAttribute( colours, 3 ) );
+		geometry.colors = colours;
+		geometry.computeBoundingSphere();
+		
+		geometry.translate(-geometry.boundingSphere.center.x, -geometry.boundingSphere.center.y, -geometry.boundingSphere.center.z);
+		
+		//	this is why the rendering is so fast, because we're using points. i did try using 3d cubes but it was very slow to render
+		//	and anything beyond 50k cubes and my laptop was upset. so...points is the winner.
+		let material = new THREE.PointsMaterial( { size: POINT_SIZE, vertexColors: THREE.VertexColors } );
+		points = new THREE.Points( geometry, material );
+		world.add( points );
+		
+		camera.position.set(0, geometry.boundingSphere.radius, geometry.boundingSphere.radius);
+		camera.lookAt(geometry.boundingSphere.center);
+	})();
+	
+        // End custom content
+        window.addEventListener( 'resize', onWindowResize, false );
+        onWindowResize();
+
+        var options = {
+          // Flag to start AR if is the unique display available.
+          AR_AUTOSTART: false, // Default: true
+        }
+
+        renderer.xr = new THREE.WebXRManager(options, displays, renderer, camera, world, update);
+        renderer.xr.addEventListener('sessionStarted', sessionStarted);
+        renderer.xr.addEventListener('sessionEnded', sessionEnded);
+
+        if(!renderer.xr.autoStarted){
+          var buttonsContainer = document.createElement( 'div' );
+          buttonsContainer.id = 'buttonsContainer';
+          buttonsContainer.style.position = 'absolute';
+          buttonsContainer.style.bottom = '10%';
+          buttonsContainer.style.width = '100%';
+          buttonsContainer.style.textAlign = 'center';
+          buttonsContainer.style.zIndex = '999';
+          document.body.appendChild(buttonsContainer);
+          addEnterButtons(displays);
+        }
+
+        renderer.animate(render);
+      }
+
+      function sessionStarted(data) {
+        activeRealityType = data.session.realityType;
+        if(data.session.realityType === 'ar'){
+          //sky.visible = false;
+        }
+      }
+
+      function sessionEnded(data) {
+        activeRealityType = 'magicWindow';
+        if(data.session.realityType === 'ar'){
+          //sky.visible = true;
+        }
+      }
+
+      function addEnterButtons(displays) {
+        for (var i = 0; i < displays.length; i++) {
+          var display = displays[i];
+          if(display.supportedRealities.vr){
+            buttonsContainer.appendChild(getEnterButton(display, 'vr'));
+          }
+          if(display.supportedRealities.ar){
+            buttonsContainer.appendChild(getEnterButton(display, 'ar'));
+          }
+        }
+      }
+
+      function getEnterButton(display, reality) {
+        // HMDs require the call to start presenting to occur due to a user input event, so make a button to trigger that
+        var button = document.createElement( 'button' );
+        button.style.display = 'inline-block';
+        button.style.margin = '5px';
+        button.style.width = '120px';
+        button.style.border = '0';
+        button.style.padding = '8px';
+        button.style.cursor = 'pointer';
+        button.style.backgroundColor = '#000';
+        button.style.color = '#fff';
+        button.style.fontFamily = 'sans-serif';
+        button.style.fontSize = '13px';
+        button.style.fontStyle = 'normal';
+        button.style.textAlign = 'center';
+        if(reality === 'vr'){
+          button.textContent = 'ENTER VR';
+        }else{
+          button.textContent = 'ENTER AR';
+        }
+        
+        button.addEventListener('click', ev => {
+          if(reality === 'ar'){
+            if(!renderer.xr.sessionActive){
+              // Entering AR.
+              button.textContent = 'EXIT AR';
+              renderer.xr.startSession(display, reality, true);
+            }else{
+              // Exiting AR.
+              button.textContent = 'ENTER AR';
+              renderer.xr.endSession();
+              //sky.visible = true;
+            }
+          }else{
+            document.getElementById('buttonsContainer').style.display = 'none';
+            renderer.xr.startPresenting();
+          }
+        });
+
+        if(reality === 'vr'){
+          window.addEventListener('vrdisplaypresentchange', (evt) => {
+            // Polyfill places cameraActivateddisplay inside the detail property
+            var display = evt.display || evt.detail.display;
+            if (!display.isPresenting) {
+              // Exiting VR.
+              renderer.xr.endSession();
+              document.getElementById('buttonsContainer').style.display = 'block';
+            }
+          });
+        }
+
+        return button;
+      }
+
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+      }
+
+      // Called once per frame, before render, to give the app a chance to update this.scene
+      function update(frame) {
+        render();
+      }
+
+	  let XAxisRotation = new THREE.Vector3(1, 0, 0);
+	  let YAxisRotation = new THREE.Vector3(0, 1, 0);
+	  let ZAxisRotation = new THREE.Vector3(0, 0, 1);
+	  let MAX_ROT_RADIANS = (2 * Math.PI) / 216;
+	  
+      function render() {
+		if (gamepad) {
+			let s = '';
+			gamepad.axes.forEach((a, i) => {
+				if (Math.abs(a - lastAxes[i]) > 0.1) {
+					switch (i) {
+						case 0: //	left Horiz
+							world.rotateOnAxis(YAxisRotation, MAX_ROT_RADIANS * a);
+							console.log('left horiz: ' + a);
+							break;
+						case 1: //	left Vert
+							world.rotateOnAxis(XAxisRotation, MAX_ROT_RADIANS * a);
+							console.log('left vert: ' + a);
+							break;
+						case 2: //	right Horiz
+							break;
+						case 3: //	left Trigger
+							break;
+						case 4: //	right Trigger
+							break;
+						case 5: //	right Vert
+							break;
+						default:
+							break;
+					}
+				}
+			});
+			gamepad.buttons.forEach((b, i) => {
+				if (b.pressed) console.log("pressed " + i);
+				switch (i) {
+					case 0:	//	square
+						break;
+					case 1:	//	x
+						if (b.pressed) {
+							world.translateZ(-100);
+						}
+						break;
+					case 2:	//	circle
+						break;
+					case 3:	//	triangle
+						break;
+					default:
+						break;
+				}
+			});
+//			console.log(s);
+		}
+	  
+        switch (activeRealityType) {
+          case 'magicWindow':
+          case 'vr':
+            var delta = clock.getDelta() * 60;
+            // cube.rotation.y += delta * 0.01;
+            break;
+        }
+  
+        if(!renderer.xr.sessionActive){
+          //renderer.setSize( window.innerWidth, window.innerHeight );
+          renderer.render(scene, camera);
+        }else{
+
+        }
+        // console.log(camera.getWorldPosition(), cube.getWorldPosition());
+      }
+	  
+	  function animate() 
+	{
+		requestAnimationFrame( animate );
+		render();		
+		//controls.update();
+	}
+
+var gamepad = null;
+var lastAxes = null;
+
+window.addEventListener("gamepaddisconnected", function(e) {
+	console.log("Gamepad disconnected at index %d", e.gamepad.index);
+	gamepad = null;
+});
+
+window.addEventListener("gamepadconnected", function(e) {
+	console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+	e.gamepad.index, e.gamepad.id,
+	e.gamepad.buttons.length, e.gamepad.axes.length);
+	
+	if (!gamepad && e.gamepad.id === '054c-09cc-Wireless Controller') {
+		gamepad = e.gamepad;
+		lastAxes = gamepad.axes.slice();
+	}
+});
+
+    </script>
+  </body>
+</html>
