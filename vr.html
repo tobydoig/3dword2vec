@@ -7,6 +7,9 @@
 	
 	webxr demo from stewart smith (using controllers - which don't work for me - cool, let's fix)
 		https://github.com/moar-tech/spacerocks
+	
+	Using XBox controller emulated via Playstation 4 conteoller (DS4Windows).
+	Moving the camera in 3d/webgl mode works, in VR mode it doesn't. Why?
 -->
 
 <!DOCTYPE html>
@@ -34,8 +37,17 @@
       var clock = new THREE.Clock();
 
       var container;
-      var renderer, camera, scene, world;
-
+      var renderer, camera, scene, world, myBall;
+	  var COLOR_RED = new THREE.Color(0xff0000);
+	  var COLOR_GREEN = new THREE.Color(0x00ff00);
+	  
+	var raycaster = new THREE.Raycaster();
+	raycaster.params.Points.threshold = 128;
+	
+	var points;
+	var positions = new Float32Array(W2VDATA.length * 3);
+	var colours = new Float32Array(W2VDATA.length * 3);
+	
       // ar, magicWindow, vr
       var activeRealityType = 'magicWindow';
 
@@ -47,20 +59,51 @@
         document.body.appendChild( container );
         
         scene = new THREE.Scene();
+		scene.background = new THREE.Color( 0x00 );
 		
 	  world = new THREE.Object3D();
+	  world.name = 'world';
 	  scene.add(world);
+	  world.translateZ(-50000);
+	  world.receiveShadown = false;
+
+	(function() {
+		let geom = new THREE.SphereBufferGeometry(128);
+		let mat = new THREE.MeshBasicMaterial( { color: 0xffffff });
+		myBall = new THREE.Mesh(geom, mat);
 		
+		myBall.position.set(positions[0], positions[1], positions[2]);
+		
+		scene.add(myBall);
+	})();
+
+	
 	// CAMERA
 	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
-	var VIEW_ANGLE = 45, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
+	var VIEW_ANGLE = 70, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
 	
         camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, -1);
-        world.add( camera );
-        camera.position.set(0, 1, 0);
+        scene.add( camera );
+		
+		crosshair = new THREE.Mesh(
+			new THREE.RingBufferGeometry( 0.02, 0.04, 16 ),
+			new THREE.MeshBasicMaterial( {
+				color: 0xff0000,
+				opacity: 0.5,
+				transparent: true
+			} )
+		);
+		crosshair.position.z = - 2;
+		camera.add( crosshair );
+				
+		//camera.position.set(0, 0, 0);
         renderer = new THREE.WebGLRenderer( { alpha: true } );
         renderer.autoClear = false;
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		renderer.vr.enabled  = true;
+		renderer.vr.standing = true;
         container.appendChild( renderer.domElement );
+		
 
 //	controls = new THREE.OrbitControls( camera, renderer.domElement );
 //	controls = new THREE.GamepadControls( camera );
@@ -69,13 +112,11 @@
 	// if you pick a MAX_XY too small and it either crashes or looks very blocky/rubbish.
 	// if you pick something bigger then you will also need to increase POINT_SIZE
 	var MAX_XY = 100000;
-	var POINT_SIZE = 128;
+	var POINT_SIZE = 32;
 	
 		console.log('geometry');
 	var geometry = new THREE.BufferGeometry();
-	var points;
-	var positions = new Float32Array(W2VDATA.length * 3);
-	var colours = new Float32Array(W2VDATA.length * 3);
+
 	
 	//	instead of using the lookup table above we can also use the colours below. this is how i started off, the lut above
 	//	was something i added later. not convinced about it though hence not removing either code yet.
@@ -137,8 +178,8 @@
 		points = new THREE.Points( geometry, material );
 		world.add( points );
 		
-		camera.position.set(0, geometry.boundingSphere.radius, geometry.boundingSphere.radius);
-		camera.lookAt(geometry.boundingSphere.center);
+		//camera.position.set(0, geometry.boundingSphere.radius, geometry.boundingSphere.radius);
+		//camera.lookAt(geometry.boundingSphere.center);
 	})();
 	
         // End custom content
@@ -150,7 +191,7 @@
           AR_AUTOSTART: false, // Default: true
         }
 
-        renderer.xr = new THREE.WebXRManager(options, displays, renderer, camera, world, update);
+        renderer.xr = new THREE.WebXRManager(options, displays, renderer, camera, scene, update);
         renderer.xr.addEventListener('sessionStarted', sessionStarted);
         renderer.xr.addEventListener('sessionEnded', sessionEnded);
 
@@ -262,7 +303,8 @@
 	  let XAxisRotation = new THREE.Vector3(1, 0, 0);
 	  let YAxisRotation = new THREE.Vector3(0, 1, 0);
 	  let ZAxisRotation = new THREE.Vector3(0, 0, 1);
-	  let MAX_ROT_RADIANS = (2 * Math.PI) / 216;
+	  let MAX_ROT_RADIANS = (2 * Math.PI) / 360;
+	  var FLY_SPEED = 50;
 	  
       function render() {
 		if (gamepad) {
@@ -271,20 +313,23 @@
 				if (Math.abs(a - lastAxes[i]) > 0.1) {
 					switch (i) {
 						case 0: //	left Horiz
-							world.rotateOnAxis(YAxisRotation, MAX_ROT_RADIANS * a);
-							console.log('left horiz: ' + a);
+							world.applyMatrix(world.modelViewMatrix.makeTranslation(-FLY_SPEED * a, 0, 0));
+//							console.log('left horiz: ' + a);
 							break;
 						case 1: //	left Vert
-							world.rotateOnAxis(XAxisRotation, MAX_ROT_RADIANS * a);
-							console.log('left vert: ' + a);
+//							world.applyMatrix(world.modelViewMatrix.makeTranslation(0, -FLY_SPEED * a, 0));
+							world.applyMatrix(world.modelViewMatrix.makeTranslation(0, 0, -FLY_SPEED * a));
+//							console.log('left vert: ' + a);
 							break;
 						case 2: //	right Horiz
+							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(YAxisRotation, MAX_ROT_RADIANS * a));
 							break;
-						case 3: //	left Trigger
+						case 3: //	left Trigger (proportional)
 							break;
-						case 4: //	right Trigger
+						case 4: //	right Trigger (proportional)
 							break;
 						case 5: //	right Vert
+							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(XAxisRotation, -MAX_ROT_RADIANS * a));
 							break;
 						default:
 							break;
@@ -292,34 +337,62 @@
 				}
 			});
 			gamepad.buttons.forEach((b, i) => {
-				if (b.pressed) console.log("pressed " + i);
-				switch (i) {
-					case 0:	//	square
-						break;
-					case 1:	//	x
-						if (b.pressed) {
-							world.translateZ(-100);
-						}
-						break;
-					case 2:	//	circle
-						break;
-					case 3:	//	triangle
-						break;
-					default:
-						break;
+				if (b.pressed) {
+					//console.log("pressed " + i);
+					switch (i) {
+						case 0:	//	square
+							break;
+						case 1:	//	x
+							if (b.pressed) {
+								world.applyMatrix(world.modelViewMatrix.makeTranslation(0, 0, FLY_SPEED));
+							}
+							break;
+						case 2:	//	circle
+							break;
+						case 3:	//	triangle
+							break;
+						case 4:	//	left 2
+							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(ZAxisRotation, MAX_ROT_RADIANS * 0.5));
+							break;
+						case 5:	//	right 2
+							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(ZAxisRotation, -MAX_ROT_RADIANS * 0.5));
+							break;
+						case 6:	//	left trigger
+							break;
+						case 7:	//	right trigger
+							raycaster.setFromCamera( { x: 0, y: 0 }, camera );
+							var hits = raycaster.intersectObjects( [world] );
+							if (hits.length) {
+								crosshair.material.color = COLOR_GREEN;
+								let hit = hits[0];
+								let a = hit.object.geometry.getAttribute('position');
+								myBall.position.fromBufferAttribute(a, hit.index);
+								//lastSelected = hit.index;
+								
+								console.log(W2VDATA[hit.index][0]);
+							} else {
+								crosshair.material.color = COLOR_RED;
+							}
+						default:
+							break;
+					}
 				}
 			});
 //			console.log(s);
+//	  console.log(world.position);
 		}
 	  
         switch (activeRealityType) {
           case 'magicWindow':
           case 'vr':
-            var delta = clock.getDelta() * 60;
-            // cube.rotation.y += delta * 0.01;
+//            var delta = clock.getDelta() * 60;
+//            world.rotation.y += delta * 0.05;
             break;
         }
   
+            //var delta = clock.getDelta() * 60;
+            //world.rotateY(delta * 0.05);
+
         if(!renderer.xr.sessionActive){
           //renderer.setSize( window.innerWidth, window.innerHeight );
           renderer.render(scene, camera);
