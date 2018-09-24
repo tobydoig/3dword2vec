@@ -3,4 +3,4 @@ venv
 *.gz
 *.zip
 *.vec
-keyword-data.js
+html/keyword-data.js

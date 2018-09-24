@@ -157,6 +157,6 @@ model, fname = loadModel(url)
 vectors, indices = sampleVectors(model.vectors, 0.40)
 vectors = PCA_then_UMAP(vectors, 50, 3)
 clusters = clusterForColour(vectors, 10)
-fname = saveAsGraphitFile(model, vectors, indices, clusters, './keyword-data.js')
+fname = saveAsGraphitFile(model, vectors, indices, clusters, './html/keyword-data.js')
 
-log(f'Finished, now open graphit.html')
+log(f'Finished, now open html/graphit.html')

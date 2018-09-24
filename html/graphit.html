@@ -1,28 +1,123 @@
-<html>
-<head>
-	<style>
-		body { margin: 0; }
-		canvas { width: 100%; height: 100%; z-index: 10 }
-		.textlayer { width: 150px; height: 100%; position: absolute; left: 0; top: 0; margin: 0; background-color: #fff; z-index: 20 }
+<!doctype html>
+<html lang="en">
+  <head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>3d Word2Vwc</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+
+		<style>
+		#ThreeJS {
+			width: 100%;
+			height: 100%;
+		}
+		canvas { width: 100%; height: 100%; }
+		.textlayer {
+			width: 200px;
+			height: 420px;
+			position: absolute;
+			left: 10px;
+			bottom: 10px;
+			margin: 0;
+			background-color: transparent;
+			z-index: 20;
+			border: white;
+			border-style: double
+		}
+		.textglass {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width:100%;
+			height:100%;
+			background-color: #005;
+			opacity: 0.75;
+			z-index: 21;
+		}
+		.textitems {
+			position: absolute;
+			top: 0;
+			left: 0;
+			width:100%;
+			height:100%;
+			line-height: 1.25;
+			background-color: transparent;
+			color: #fff;
+			z-index: 22;
+		}
 		.text-label {
-  color: #fff;
-  font-family: "Fira Mono", Monaco, "Andale Mono", "Lucida Console", "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
-  margin: -5px 0 0 15px;
-  pointer-events:none;
-}
+		  color: #fff;
+		  font-family: "Fira Mono", Monaco, "Andale Mono", "Lucida Console", "Bitstream Vera Sans Mono", "Courier New", Courier, monospace;
+		  margin: -5px 0 0 15px;
+		  pointer-events:none;
+		}
+		.seedouter {
+			position: absolute;
+			width: 100%;
+			top: 10px;
+			background-color: transparent;
+			z-index: 12;
+		}
+		.seedlayer {
+			width: 50%;
+			margin: 0 auto;
+			background-color: pink;
+			text-align: center;
+		}
+		.pill {
+			border: 1px solid white;
+		}
+		.closebox {
+			padding: 8;
+			margin: 0;
+			border: 1px solid red
+		}
 	</style>
+    <!-- Optional JavaScript -->
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="js/jquery-3.3.1.slim.min.js"></script>
+    <script src="js/popper.min.js"></script>
+    <script src="js/bootstrap.min.js"></script>
+	<script src="js/three.min.js"></script>
+	<script src="js/OrbitControls.js"></script>
+	<script src="js/Lut.js"></script>
 	<script src="keyword-data.js"></script>
-	<script src="three.min.js"></script>
-	<script src="OrbitControls.js"></script>
-	<script src="Lut.js"></script>
-</head>
-<body>
-<ul class="textlayer"></ul>
-<div id="ThreeJS" style="z-index: 1; position: relative; left:0px; top:0px; overflow: hidden"></div>
+	<script>
+		function addSeed() {
+			var seedElem = document.querySelector('.seedlayer input[type=text]');
+			var seed = seedElem.value.trim();
+			var idx = W2VDATA.findIndex((e) => { return e[0] === seed;});
+			if (idx >= 0) {
+				console.log('found at ' + idx);
+				addTextPoint(idx);
+				var pill = document.createElement('span');
+				pill.className = 'badge badge-pill badge-info';
+				pill.appendChild(document.createTextNode(seed));
+				
+				let sl = document.querySelector('.seedlayer');
+				sl.insertBefore(pill, sl.firstChild);
+				seedElem.value = '';
+			}
+		}
+	</script>
+  </head>
+  <body>
+<div class="seedouter">
+	<div class="seedlayer">
+		<input type="text" size="20" name="seedvalue">
+		<input type="button" value="add" onclick="addSeed()">
+	</div>
+</div>
+
+<div class="textlayer"><div class="textglass"></div><ul class="textitems"></ul></div>
+<div id="ThreeJS" style="z-index: 10; overflow: hidden;"></div>
 <script>
 
 	var container, scene, camera, renderer, controls;
-	var textlayer = document.querySelector('.textlayer');
+	var textitems = document.querySelector('.textitems');
 	
 	// SCENE
 	scene = new THREE.Scene();
@@ -121,6 +216,19 @@
 		};
 	  }
 	
+	function addTextPoint(index) {
+		let a = geometry.getAttribute('position');
+		let tl = createTextLabel();
+		tl.setHTML(W2VDATA[index][0]);
+		tl.setParent(index);
+		textlabels.push(tl);
+		container.appendChild(tl.element);
+		
+		let tb = new THREE.Mesh(labelblobgeom, labelblobmat);
+		tb.position.fromBufferAttribute(a, index);
+		scene.add(tb);
+	}
+	
 	(function() {
 		//	first normalise our co-ordinates. they're just a bunch of numbers so first let's find the min and max values.
 		let min = 999;
@@ -202,7 +310,7 @@
 		scene.add(gridYZ);
 	})();
 	
-	document.addEventListener('keypress', (evt) => {
+	container.addEventListener('keypress', (evt) => {
 		if (evt.key === 'w') {
 			camera.translateZ(-MAX_XY / 1);
 			render();		
@@ -240,6 +348,7 @@
 	})();
 	
 	function onMouseDown(event) {
+	console.log('onmousedown');
 		event.preventDefault();
 		
 		mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
@@ -250,7 +359,7 @@
 		let hits = raycaster.intersectObject(points);
 		if (hits.length) {
 			let hit = hits[0];
-			let a = hit.object.geometry.getAttribute('position');
+			let a = geometry.getAttribute('position');
 			myBall.position.fromBufferAttribute(a, hit.index);
 			lastSelected = hit.index;
 			
@@ -258,16 +367,16 @@
 			
 			picked = true;
 			
-			let tl = createTextLabel();
-			tl.setHTML(W2VDATA[hit.index][0]);
-			tl.setParent(hit.index);
-			textlabels.push(tl);
-			container.appendChild(tl.element);
-			
-			let tb = new THREE.Mesh(labelblobgeom, labelblobmat);
-			tb.position.fromBufferAttribute(a, hit.index);
-			scene.add(tb);
+			addTextPoint(hit.index);
+			//controls.reset();
+			camera.lookAt(myBall.position);
+			controls.target = myBall.position.clone();
+			//controls.saveState();
 		} else {
+			//controls.reset();
+			camera.lookAt(geometry.boundingSphere.center);
+			controls.target = geometry.boundingSphere.center.clone();
+			//controls.saveState();
 			myBall.position.set(camera.position.x, camera.position.y, camera.position.z);
 			lastSelected = -1;
 			picked = false;
@@ -309,9 +418,9 @@
 			
 			let li = document.createElement('li');
 			li.innerText = W2VDATA[hit.index][0];
-			textlayer.appendChild(li);
-			if (textlayer.children.length > 20) {
-				textlayer.removeChild(textlayer.firstChild);
+			textitems.appendChild(li);
+			if (textitems.children.length > 20) {
+				textitems.removeChild(textitems.firstChild);
 			}
 		} else {
 			myBall.position.set(camera.position.x, camera.position.y, camera.position.z);
@@ -340,8 +449,8 @@
 	}
 	
 	animate();
-	window.addEventListener( 'mousedown', onMouseDown, false );
-	window.addEventListener( 'mousemove', onMouseMove, false );
+	container.addEventListener( 'mousedown', onMouseDown, false );
+	container.addEventListener( 'mousemove', onMouseMove, false );
 
 </script>
 </body>
