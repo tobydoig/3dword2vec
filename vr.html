@@ -32,17 +32,55 @@
   <body>
     <script src="three.min.js"></script>
     <script src='three.xr.js'></script>
-    <script src='keyword-data.js'></script>
+    <script src='html/keyword-data.js'></script>
     <script>
+	//	https://stackoverflow.com/questions/49981808/three-js-how-to-position-text-sprites-in-three-js-r-64
+	function makeTextSprite(message, opts) {
+		var parameters = opts || {};
+		var fontface = parameters.fontface || 'Helvetica';
+		var fontsize = parameters.fontsize || 120;
+		var fontstyle = parameters.fontstyle || 'rgba(0, 0, 0, 1.0)'
+		var canvas = document.createElement('canvas');
+		var context = canvas.getContext('2d');
+		context.font = fontsize + "px " + fontface;
+
+		// get size data (height depends only on font size)
+		var metrics = context.measureText(message);
+		var textWidth = metrics.width;
+		
+		// text color
+		context.fillStyle = fontstyle;
+		context.fillText(message, 0, fontsize);
+
+		// canvas contents will be used for a texture
+		var texture = new THREE.Texture(canvas)
+		texture.minFilter = THREE.LinearFilter;
+		texture.needsUpdate = true;
+
+		var spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+		var sprite = new THREE.Sprite( spriteMaterial );
+		sprite.scale.set( 1, 1, 1.0 );
+		sprite.center.set( 0, 0.5 );
+		
+		console.log('context = %d, %d', context.width, context.height);
+		return sprite;
+	}
+	
       var clock = new THREE.Clock();
 
       var container;
-      var renderer, camera, scene, world, myBall;
+      var renderer, camera, scene, player, crosshair;
 	  var COLOR_RED = new THREE.Color(0xff0000);
 	  var COLOR_GREEN = new THREE.Color(0x00ff00);
+	// how many to spread our the datapoints by which will also impact how big the points are in the graph.
+	// if you pick a MAX_XY too small and it either crashes or looks very blocky/rubbish.
+	// if you pick something bigger then you will also need to increase POINT_SIZE
+	var MAX_XY = 100000;
+	var POINT_SIZE = 32;
+
 	  
 	var raycaster = new THREE.Raycaster();
-	raycaster.params.Points.threshold = 128;
+	raycaster.params.Points.threshold = 64;
 	
 	var points;
 	var positions = new Float32Array(W2VDATA.length * 3);
@@ -61,42 +99,27 @@
         scene = new THREE.Scene();
 		scene.background = new THREE.Color( 0x00 );
 		
-	  world = new THREE.Object3D();
-	  world.name = 'world';
-	  scene.add(world);
-	  world.translateZ(-50000);
-	  world.receiveShadown = false;
-
-	(function() {
-		let geom = new THREE.SphereBufferGeometry(128);
-		let mat = new THREE.MeshBasicMaterial( { color: 0xffffff });
-		myBall = new THREE.Mesh(geom, mat);
-		
-		myBall.position.set(positions[0], positions[1], positions[2]);
-		
-		scene.add(myBall);
-	})();
-
-	
 	// CAMERA
 	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
 	var VIEW_ANGLE = 70, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
 	
+		player = new THREE.Group();
+		scene.add(player);
+		
         camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, -1);
-        scene.add( camera );
+		player.add(camera);
 		
 		crosshair = new THREE.Mesh(
-			new THREE.RingBufferGeometry( 0.02, 0.04, 16 ),
+			new THREE.RingBufferGeometry( 0.01, 0.02, 16 ),
 			new THREE.MeshBasicMaterial( {
 				color: 0xff0000,
 				opacity: 0.5,
 				transparent: true
 			} )
 		);
-		crosshair.position.z = - 2;
-		camera.add( crosshair );
+		camera.add(crosshair);
+		crosshair.position.z = -1;
 				
-		//camera.position.set(0, 0, 0);
         renderer = new THREE.WebGLRenderer( { alpha: true } );
         renderer.autoClear = false;
 		renderer.setSize( window.innerWidth, window.innerHeight );
@@ -104,16 +127,6 @@
 		renderer.vr.standing = true;
         container.appendChild( renderer.domElement );
 		
-
-//	controls = new THREE.OrbitControls( camera, renderer.domElement );
-//	controls = new THREE.GamepadControls( camera );
-		
-	// how many to spread our the datapoints by which will also impact how big the points are in the graph.
-	// if you pick a MAX_XY too small and it either crashes or looks very blocky/rubbish.
-	// if you pick something bigger then you will also need to increase POINT_SIZE
-	var MAX_XY = 100000;
-	var POINT_SIZE = 32;
-	
 		console.log('geometry');
 	var geometry = new THREE.BufferGeometry();
 
@@ -152,7 +165,6 @@
 			let y = (e[2] - min) / diff;
 			let z = (e[3] - min) / diff;
 			let c = palette[e[4]];	// make sure e[4] is < CLUSTERS (in w2v.py)
-			//let c = lut.getColor(e[4]);
 			
 			positions[ix] = x * MAX_XY;
 			positions[ix + 1] = y * MAX_XY;
@@ -176,10 +188,10 @@
 		//	and anything beyond 50k cubes and my laptop was upset. so...points is the winner.
 		let material = new THREE.PointsMaterial( { size: POINT_SIZE, vertexColors: THREE.VertexColors } );
 		points = new THREE.Points( geometry, material );
-		world.add( points );
+		scene.add( points );
 		
-		//camera.position.set(0, geometry.boundingSphere.radius, geometry.boundingSphere.radius);
-		//camera.lookAt(geometry.boundingSphere.center);
+		//player.position.set(geometry.boundingSphere.radius, geometry.boundingSphere.radius, 0);
+		//player.lookAt(geometry.boundingSphere.center);
 	})();
 	
         // End custom content
@@ -305,6 +317,7 @@
 	  let ZAxisRotation = new THREE.Vector3(0, 0, 1);
 	  let MAX_ROT_RADIANS = (2 * Math.PI) / 360;
 	  var FLY_SPEED = 50;
+	  var labels = {};
 	  
       function render() {
 		if (gamepad) {
@@ -313,29 +326,35 @@
 				if (Math.abs(a - lastAxes[i]) > 0.1) {
 					switch (i) {
 						case 0: //	left Horiz
-							world.applyMatrix(world.modelViewMatrix.makeTranslation(-FLY_SPEED * a, 0, 0));
-//							console.log('left horiz: ' + a);
+							player.translateX(FLY_SPEED * a);
+//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 1: //	left Vert
-//							world.applyMatrix(world.modelViewMatrix.makeTranslation(0, -FLY_SPEED * a, 0));
-							world.applyMatrix(world.modelViewMatrix.makeTranslation(0, 0, -FLY_SPEED * a));
-//							console.log('left vert: ' + a);
+							player.translateZ(FLY_SPEED * a);
+//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 2: //	right Horiz
-							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(YAxisRotation, MAX_ROT_RADIANS * a));
-							break;
-						case 3: //	left Trigger (proportional)
-							break;
-						case 4: //	right Trigger (proportional)
+							player.rotateY(-MAX_ROT_RADIANS * a);
+//							console.log('right horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 5: //	right Vert
-							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(XAxisRotation, -MAX_ROT_RADIANS * a));
+							player.rotateX(MAX_ROT_RADIANS * a);
+//							console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						default:
 							break;
 					}
 				}
 			});
+			
+			raycaster.setFromCamera( { x: 0, y: 0 }, camera );
+			var hits = raycaster.intersectObjects( [points] );
+			if (hits.length) {
+				crosshair.material.color = COLOR_GREEN;
+			} else {
+				crosshair.material.color = COLOR_RED;
+			}
+			
 			gamepad.buttons.forEach((b, i) => {
 				if (b.pressed) {
 					//console.log("pressed " + i);
@@ -344,35 +363,40 @@
 							break;
 						case 1:	//	x
 							if (b.pressed) {
-								world.applyMatrix(world.modelViewMatrix.makeTranslation(0, 0, FLY_SPEED));
+								player.translateZ(-FLY_SPEED * 4);
+//								console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							}
 							break;
 						case 2:	//	circle
+							if (hits.length) {
+								let hit = hits[0];
+								let a = hit.object.geometry.getAttribute('position');
+								let txt = W2VDATA[hit.index][0];
+								console.log(hit.index + ' - ' + txt);
+								
+								//if (gamepad.buttons[2].pressed) {
+									if (!labels.hasOwnProperty(hit.index)) {
+										let label = makeTextSprite(txt, {fontstyle: 'white'});
+										scene.add(label);
+										label.position.fromBufferAttribute(a, hit.index);
+										label.translateX(-50);
+										label.translateY(300);
+										labels[hit.index] = label;
+									}
+								//}
+							}
 							break;
 						case 3:	//	triangle
 							break;
 						case 4:	//	left 2
-							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(ZAxisRotation, MAX_ROT_RADIANS * 0.5));
+							player.rotateZ(-MAX_ROT_RADIANS);
 							break;
 						case 5:	//	right 2
-							world.applyMatrix(world.modelViewMatrix.makeRotationAxis(ZAxisRotation, -MAX_ROT_RADIANS * 0.5));
+							player.rotateZ(MAX_ROT_RADIANS);
 							break;
 						case 6:	//	left trigger
 							break;
 						case 7:	//	right trigger
-							raycaster.setFromCamera( { x: 0, y: 0 }, camera );
-							var hits = raycaster.intersectObjects( [world] );
-							if (hits.length) {
-								crosshair.material.color = COLOR_GREEN;
-								let hit = hits[0];
-								let a = hit.object.geometry.getAttribute('position');
-								myBall.position.fromBufferAttribute(a, hit.index);
-								//lastSelected = hit.index;
-								
-								console.log(W2VDATA[hit.index][0]);
-							} else {
-								crosshair.material.color = COLOR_RED;
-							}
 						default:
 							break;
 					}
