@@ -19,120 +19,59 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <style>
-      body, html {
-        padding: 0;
-        margin: 0;
-        width: 100%;
-        height: 100%;
-        -webkit-user-select: none;
-        user-select: none;
-      }
+		body {
+			margin: 0px;
+			color: #fff;
+			font-family: Monospace;
+			background-color: #444;
+			overflow: hidden;
+		}
     </style>
-  </head>
-  <body>
+</head>
+<body>
     <script src="three.min.js"></script>
-    <script src='three.xr.js'></script>
+    <script src='WebVR.js'></script>
     <script src='html/keyword-data.js'></script>
     <script>
-	//	https://stackoverflow.com/questions/49981808/three-js-how-to-position-text-sprites-in-three-js-r-64
-	function makeTextSprite(message, opts) {
-		var parameters = opts || {};
-		var fontface = parameters.fontface || 'Helvetica';
-		var fontsize = parameters.fontsize || 120;
-		var fontstyle = parameters.fontstyle || 'rgba(0, 0, 0, 1.0)'
-		var canvas = document.createElement('canvas');
-		var context = canvas.getContext('2d');
-		context.font = fontsize + "px " + fontface;
+	var clock = new THREE.Clock();
 
-		// get size data (height depends only on font size)
-		var metrics = context.measureText(message);
-		var textWidth = metrics.width;
-		
-		// text color
-		context.fillStyle = fontstyle;
-		context.fillText(message, 0, fontsize);
+	var COLOR_RED = new THREE.Color(0xff0000);
+	var COLOR_GREEN = new THREE.Color(0x00ff00);
+	var MAX_XY = 1000;
+	var POINT_SIZE = 0.1;
 
-		// canvas contents will be used for a texture
-		var texture = new THREE.Texture(canvas)
-		texture.minFilter = THREE.LinearFilter;
-		texture.needsUpdate = true;
-
-		var spriteMaterial = new THREE.SpriteMaterial({ map: texture });
-		var sprite = new THREE.Sprite( spriteMaterial );
-		sprite.scale.set( 1, 1, 1.0 );
-		sprite.center.set( 0, 0.5 );
-		
-		console.log('context = %d, %d', context.width, context.height);
-		return sprite;
-	}
+	var renderer = new THREE.WebGLRenderer( { antialias: true } );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.vr.enabled  = true;
+	document.body.appendChild( renderer.domElement );
+	document.body.appendChild( WEBVR.createButton( renderer, { frameOfReferenceType: 'eye-level' } ) );
 	
-      var clock = new THREE.Clock();
-
-      var container;
-      var renderer, camera, scene, player, crosshair;
-	  var COLOR_RED = new THREE.Color(0xff0000);
-	  var COLOR_GREEN = new THREE.Color(0x00ff00);
-	// how many to spread our the datapoints by which will also impact how big the points are in the graph.
-	// if you pick a MAX_XY too small and it either crashes or looks very blocky/rubbish.
-	// if you pick something bigger then you will also need to increase POINT_SIZE
-	var MAX_XY = 100000;
-	var POINT_SIZE = 32;
-
-	  
-	var raycaster = new THREE.Raycaster();
-	raycaster.params.Points.threshold = 64;
+	var scene = new THREE.Scene();
+	scene.background = new THREE.Color( 0x0 );
 	
-	var points;
+	var player = new THREE.Group();
+	scene.add(player);
+	
+	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
+	var VIEW_ANGLE = 70, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = -1;
+	var camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, -1);
+	player.add(camera);
+	
+	var crosshair = new THREE.Mesh(
+		new THREE.RingBufferGeometry( 0.001, 0.002, 16 ),
+		new THREE.MeshBasicMaterial( {
+			color: 0xff0000,
+			opacity: 0.5,
+			transparent: true
+		} )
+	);
+	camera.add(crosshair);
+	crosshair.position.z = -0.1;
+	
 	var positions = new Float32Array(W2VDATA.length * 3);
 	var colours = new Float32Array(W2VDATA.length * 3);
-	
-      // ar, magicWindow, vr
-      var activeRealityType = 'magicWindow';
-
-      THREE.WebXRUtils.getDisplays().then(init);
-
-      function init(displays) {
-	  console.log('init...');
-        container = document.createElement( 'div' );
-        document.body.appendChild( container );
-        
-        scene = new THREE.Scene();
-		scene.background = new THREE.Color( 0x00 );
-		
-	// CAMERA
-	var SCREEN_WIDTH = window.innerWidth, SCREEN_HEIGHT = window.innerHeight;
-	var VIEW_ANGLE = 70, ASPECT = SCREEN_WIDTH / SCREEN_HEIGHT, NEAR = 0.1, FAR = 20000;
-	
-		player = new THREE.Group();
-		scene.add(player);
-		
-        camera = new THREE.PerspectiveCamera(VIEW_ANGLE, ASPECT, NEAR, -1);
-		player.add(camera);
-		
-		crosshair = new THREE.Mesh(
-			new THREE.RingBufferGeometry( 0.01, 0.02, 16 ),
-			new THREE.MeshBasicMaterial( {
-				color: 0xff0000,
-				opacity: 0.5,
-				transparent: true
-			} )
-		);
-		camera.add(crosshair);
-		crosshair.position.z = -1;
-				
-        renderer = new THREE.WebGLRenderer( { alpha: true } );
-        renderer.autoClear = false;
-		renderer.setSize( window.innerWidth, window.innerHeight );
-		renderer.vr.enabled  = true;
-		renderer.vr.standing = true;
-        container.appendChild( renderer.domElement );
-		
-		console.log('geometry');
 	var geometry = new THREE.BufferGeometry();
-
-	
-	//	instead of using the lookup table above we can also use the colours below. this is how i started off, the lut above
-	//	was something i added later. not convinced about it though hence not removing either code yet.
 	var palette = [
 		new THREE.Color(0xff0000),
 		new THREE.Color(0x00ff00),
@@ -145,12 +84,11 @@
 		new THREE.Color(0x800080),
 		new THREE.Color(0xD2691E)
 	];
-	
+	var points;
 	(function() {
 		//	first normalise our co-ordinates. they're just a bunch of numbers so first let's find the min and max values.
-		let min = 999;
-		let max = -999;
-		console.log('points');
+		let min = W2VDATA[0][1];
+		let max = min;
 		W2VDATA.forEach((e) => {
 			min = Math.min(min, Math.min(Math.min(e[1], e[2]), e[3]));
 			max = Math.max(max, Math.max(Math.max(e[1], e[2]), e[3]));
@@ -182,144 +120,71 @@
 		geometry.colors = colours;
 		geometry.computeBoundingSphere();
 		
-		geometry.translate(-geometry.boundingSphere.center.x, -geometry.boundingSphere.center.y, -geometry.boundingSphere.center.z);
-		
 		//	this is why the rendering is so fast, because we're using points. i did try using 3d cubes but it was very slow to render
 		//	and anything beyond 50k cubes and my laptop was upset. so...points is the winner.
 		let material = new THREE.PointsMaterial( { size: POINT_SIZE, vertexColors: THREE.VertexColors } );
 		points = new THREE.Points( geometry, material );
 		scene.add( points );
 		
-		//player.position.set(geometry.boundingSphere.radius, geometry.boundingSphere.radius, 0);
-		//player.lookAt(geometry.boundingSphere.center);
+		geometry.translate(-geometry.boundingSphere.center.x, -geometry.boundingSphere.center.y, -geometry.boundingSphere.center.z);
+		
+		player.lookAt(geometry.boundingSphere.center);
 	})();
 	
-        // End custom content
-        window.addEventListener( 'resize', onWindowResize, false );
-        onWindowResize();
+	function onWindowResize() {
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}
+	window.addEventListener( 'resize', onWindowResize, false );
+	
+	var gamepad = null;
+	var lastAxes = null;
 
-        var options = {
-          // Flag to start AR if is the unique display available.
-          AR_AUTOSTART: false, // Default: true
-        }
+	window.addEventListener("gamepaddisconnected", function(e) {
+		console.log("Gamepad disconnected at index %d", e.gamepad.index);
+		gamepad = null;
+	});
 
-        renderer.xr = new THREE.WebXRManager(options, displays, renderer, camera, scene, update);
-        renderer.xr.addEventListener('sessionStarted', sessionStarted);
-        renderer.xr.addEventListener('sessionEnded', sessionEnded);
+	window.addEventListener("gamepadconnected", function(e) {
+		console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+		e.gamepad.index, e.gamepad.id,
+		e.gamepad.buttons.length, e.gamepad.axes.length);
+		
+		if (!gamepad && e.gamepad.id === '054c-09cc-Wireless Controller') {
+			gamepad = e.gamepad;
+			lastAxes = gamepad.axes.slice();
+		}
+	});
+	
+	const KEY_BOOST = 0.1;
+	window.addEventListener('keydown', (e) => {
+		switch (e.key) {
+			case 'w':
+				player.translateZ(-FLY_SPEED * KEY_BOOST);
+				break;
+			case 's':
+				player.translateZ(FLY_SPEED * KEY_BOOST);
+				break;
+			case 'a':
+				player.translateX(-FLY_SPEED * KEY_BOOST);
+				break;
+			case 'd':
+				player.translateX(FLY_SPEED * KEY_BOOST);
+				break;
+		}
+	});
+	
+	let XAxisRotation = new THREE.Vector3(1, 0, 0);
+	let YAxisRotation = new THREE.Vector3(0, 1, 0);
+	let ZAxisRotation = new THREE.Vector3(0, 0, 1);
+	let MAX_ROT_RADIANS = (2 * Math.PI) / 360;
+	var FLY_SPEED = 5;
+	var labels = {};
 
-        if(!renderer.xr.autoStarted){
-          var buttonsContainer = document.createElement( 'div' );
-          buttonsContainer.id = 'buttonsContainer';
-          buttonsContainer.style.position = 'absolute';
-          buttonsContainer.style.bottom = '10%';
-          buttonsContainer.style.width = '100%';
-          buttonsContainer.style.textAlign = 'center';
-          buttonsContainer.style.zIndex = '999';
-          document.body.appendChild(buttonsContainer);
-          addEnterButtons(displays);
-        }
-
-        renderer.animate(render);
-      }
-
-      function sessionStarted(data) {
-        activeRealityType = data.session.realityType;
-        if(data.session.realityType === 'ar'){
-          //sky.visible = false;
-        }
-      }
-
-      function sessionEnded(data) {
-        activeRealityType = 'magicWindow';
-        if(data.session.realityType === 'ar'){
-          //sky.visible = true;
-        }
-      }
-
-      function addEnterButtons(displays) {
-        for (var i = 0; i < displays.length; i++) {
-          var display = displays[i];
-          if(display.supportedRealities.vr){
-            buttonsContainer.appendChild(getEnterButton(display, 'vr'));
-          }
-          if(display.supportedRealities.ar){
-            buttonsContainer.appendChild(getEnterButton(display, 'ar'));
-          }
-        }
-      }
-
-      function getEnterButton(display, reality) {
-        // HMDs require the call to start presenting to occur due to a user input event, so make a button to trigger that
-        var button = document.createElement( 'button' );
-        button.style.display = 'inline-block';
-        button.style.margin = '5px';
-        button.style.width = '120px';
-        button.style.border = '0';
-        button.style.padding = '8px';
-        button.style.cursor = 'pointer';
-        button.style.backgroundColor = '#000';
-        button.style.color = '#fff';
-        button.style.fontFamily = 'sans-serif';
-        button.style.fontSize = '13px';
-        button.style.fontStyle = 'normal';
-        button.style.textAlign = 'center';
-        if(reality === 'vr'){
-          button.textContent = 'ENTER VR';
-        }else{
-          button.textContent = 'ENTER AR';
-        }
-        
-        button.addEventListener('click', ev => {
-          if(reality === 'ar'){
-            if(!renderer.xr.sessionActive){
-              // Entering AR.
-              button.textContent = 'EXIT AR';
-              renderer.xr.startSession(display, reality, true);
-            }else{
-              // Exiting AR.
-              button.textContent = 'ENTER AR';
-              renderer.xr.endSession();
-              //sky.visible = true;
-            }
-          }else{
-            document.getElementById('buttonsContainer').style.display = 'none';
-            renderer.xr.startPresenting();
-          }
-        });
-
-        if(reality === 'vr'){
-          window.addEventListener('vrdisplaypresentchange', (evt) => {
-            // Polyfill places cameraActivateddisplay inside the detail property
-            var display = evt.display || evt.detail.display;
-            if (!display.isPresenting) {
-              // Exiting VR.
-              renderer.xr.endSession();
-              document.getElementById('buttonsContainer').style.display = 'block';
-            }
-          });
-        }
-
-        return button;
-      }
-
-      function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-      }
-
-      // Called once per frame, before render, to give the app a chance to update this.scene
-      function update(frame) {
-        render();
-      }
-
-	  let XAxisRotation = new THREE.Vector3(1, 0, 0);
-	  let YAxisRotation = new THREE.Vector3(0, 1, 0);
-	  let ZAxisRotation = new THREE.Vector3(0, 0, 1);
-	  let MAX_ROT_RADIANS = (2 * Math.PI) / 360;
-	  var FLY_SPEED = 50;
-	  var labels = {};
-	  
-      function render() {
+	function render() {
+		player.rotateX(MAX_ROT_RADIANS * 0.1);
+		player.rotateY(MAX_ROT_RADIANS * 0.2);
 		if (gamepad) {
 			let s = '';
 			gamepad.axes.forEach((a, i) => {
@@ -327,34 +192,34 @@
 					switch (i) {
 						case 0: //	left Horiz
 							player.translateX(FLY_SPEED * a);
-//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+		//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 1: //	left Vert
 							player.translateZ(FLY_SPEED * a);
-//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+		//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 2: //	right Horiz
 							player.rotateY(-MAX_ROT_RADIANS * a);
-//							console.log('right horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+		//							console.log('right horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 5: //	right Vert
 							player.rotateX(MAX_ROT_RADIANS * a);
-//							console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+		//							console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						default:
 							break;
 					}
 				}
 			});
-			
-			raycaster.setFromCamera( { x: 0, y: 0 }, camera );
-			var hits = raycaster.intersectObjects( [points] );
-			if (hits.length) {
-				crosshair.material.color = COLOR_GREEN;
-			} else {
-				crosshair.material.color = COLOR_RED;
-			}
-			
+				
+	//			raycaster.setFromCamera( { x: 0, y: 0 }, camera );
+	//			var hits = raycaster.intersectObjects( [points] );
+	//			if (hits.length) {
+	//				crosshair.material.color = COLOR_GREEN;
+	//			} else {
+	//				crosshair.material.color = COLOR_RED;
+	//			}
+				
 			gamepad.buttons.forEach((b, i) => {
 				if (b.pressed) {
 					//console.log("pressed " + i);
@@ -364,7 +229,7 @@
 						case 1:	//	x
 							if (b.pressed) {
 								player.translateZ(-FLY_SPEED * 4);
-//								console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+	//								console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							}
 							break;
 						case 2:	//	circle
@@ -402,56 +267,12 @@
 					}
 				}
 			});
-//			console.log(s);
-//	  console.log(world.position);
 		}
-	  
-        switch (activeRealityType) {
-          case 'magicWindow':
-          case 'vr':
-//            var delta = clock.getDelta() * 60;
-//            world.rotation.y += delta * 0.05;
-            break;
-        }
-  
-            //var delta = clock.getDelta() * 60;
-            //world.rotateY(delta * 0.05);
-
-        if(!renderer.xr.sessionActive){
-          //renderer.setSize( window.innerWidth, window.innerHeight );
-          renderer.render(scene, camera);
-        }else{
-
-        }
-        // console.log(camera.getWorldPosition(), cube.getWorldPosition());
-      }
-	  
-	  function animate() 
-	{
-		requestAnimationFrame( animate );
-		render();		
-		//controls.update();
+		
+		renderer.render(scene, camera);
 	}
-
-var gamepad = null;
-var lastAxes = null;
-
-window.addEventListener("gamepaddisconnected", function(e) {
-	console.log("Gamepad disconnected at index %d", e.gamepad.index);
-	gamepad = null;
-});
-
-window.addEventListener("gamepadconnected", function(e) {
-	console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
-	e.gamepad.index, e.gamepad.id,
-	e.gamepad.buttons.length, e.gamepad.axes.length);
 	
-	if (!gamepad && e.gamepad.id === '054c-09cc-Wireless Controller') {
-		gamepad = e.gamepad;
-		lastAxes = gamepad.axes.slice();
-	}
-});
-
+	renderer.setAnimationLoop( render );
     </script>
   </body>
 </html>
