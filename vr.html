@@ -31,7 +31,7 @@
 <body>
     <script src="three.min.js"></script>
     <script src='WebVR.js'></script>
-    <script src='html/keyword-data.js'></script>
+    <script src='keyword-data.js'></script>
     <script>
 	var clock = new THREE.Clock();
 
@@ -161,10 +161,12 @@
 	window.addEventListener('keydown', (e) => {
 		switch (e.key) {
 			case 'w':
-				player.translateZ(-FLY_SPEED * KEY_BOOST);
+//				player.translateZ(-FLY_SPEED * KEY_BOOST);
+				player.position.add(camera.getWorldDirection().multiplyScalar(FLY_SPEED * KEY_BOOST));
 				break;
 			case 's':
-				player.translateZ(FLY_SPEED * KEY_BOOST);
+//				player.translateZ(FLY_SPEED * KEY_BOOST);
+				player.position.add(camera.getWorldDirection().multiplyScalar(-FLY_SPEED * KEY_BOOST));
 				break;
 			case 'a':
 				player.translateX(-FLY_SPEED * KEY_BOOST);
@@ -178,32 +180,54 @@
 	let XAxisRotation = new THREE.Vector3(1, 0, 0);
 	let YAxisRotation = new THREE.Vector3(0, 1, 0);
 	let ZAxisRotation = new THREE.Vector3(0, 0, 1);
-	let MAX_ROT_RADIANS = (2 * Math.PI) / 360;
-	var FLY_SPEED = 5;
+	let MAX_ROT_RADIANS = (2 * Math.PI) / 720;
+	let RADIANS_90_DEGREES = Math.PI / 2;
+	var FLY_SPEED = 0.5;
 	var labels = {};
-
+	let tempQuaternion = new THREE.Quaternion();
+	let tempVector3 = new THREE.Vector3();
+	let tempMatrix4 = new THREE.Matrix4();
+	let X90AxisQuaternion = new THREE.Quaternion();
+	X90AxisQuaternion.setFromAxisAngle(XAxisRotation, RADIANS_90_DEGREES);
+	let Y90AxisQuaternion = new THREE.Quaternion();
+	Y90AxisQuaternion.setFromAxisAngle(YAxisRotation, RADIANS_90_DEGREES);
+	let Z90AxisQuaternion = new THREE.Quaternion();
+	Z90AxisQuaternion.setFromAxisAngle(ZAxisRotation, RADIANS_90_DEGREES);
+	
 	function render() {
-		player.rotateX(MAX_ROT_RADIANS * 0.1);
-		player.rotateY(MAX_ROT_RADIANS * 0.2);
 		if (gamepad) {
 			let s = '';
 			gamepad.axes.forEach((a, i) => {
 				if (Math.abs(a - lastAxes[i]) > 0.1) {
 					switch (i) {
 						case 0: //	left Horiz
+//							camera.getWorldDirection(tempVector3);
+//				player.position.add(tempVector3.applyAxisAngle(YAxisRotation, -RADIANS_90_DEGREES).multiplyScalar(FLY_SPEED * a));
 							player.translateX(FLY_SPEED * a);
 		//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 1: //	left Vert
+//							camera.getWorldDirection(tempVector3);
+//				player.position.sub(tempVector3.multiplyScalar(FLY_SPEED * a));
 							player.translateZ(FLY_SPEED * a);
 		//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 2: //	right Horiz
-							player.rotateY(-MAX_ROT_RADIANS * a);
+							camera.getWorldQuaternion(tempQuaternion);
+							tempQuaternion.multiply(Y90AxisQuaternion);
+							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
+//							player.rotateY(-MAX_ROT_RADIANS * a);
 		//							console.log('right horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						case 5: //	right Vert
-							player.rotateX(MAX_ROT_RADIANS * a);
+							camera.getWorldQuaternion(tempQuaternion);
+							tempQuaternion.multiply(Z90AxisQuaternion);
+							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
+//							player.rotateX(MAX_ROT_RADIANS * a);
 		//							console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							break;
 						default:
@@ -228,7 +252,9 @@
 							break;
 						case 1:	//	x
 							if (b.pressed) {
-								player.translateZ(-FLY_SPEED * 4);
+								camera.getWorldDirection(tempVector3);
+				player.position.add(tempVector3.multiplyScalar(FLY_SPEED * 2));
+//								player.translateZ(-FLY_SPEED * 4);
 	//								console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
 							}
 							break;
@@ -254,10 +280,24 @@
 						case 3:	//	triangle
 							break;
 						case 4:	//	left 2
-							player.rotateZ(-MAX_ROT_RADIANS);
+							camera.getWorldQuaternion(tempQuaternion);
+							tempQuaternion.multiply(X90AxisQuaternion);
+							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
+//							camera.getWorldDirection(tempVector3);
+//							player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
+//							player.rotateZ(-MAX_ROT_RADIANS);
 							break;
 						case 5:	//	right 2
-							player.rotateZ(MAX_ROT_RADIANS);
+							camera.getWorldQuaternion(tempQuaternion);
+							tempQuaternion.multiply(X90AxisQuaternion);
+							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+							player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
+//							camera.getWorldDirection(tempVector3);
+//							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
+//							player.rotateZ(MAX_ROT_RADIANS);
 							break;
 						case 6:	//	left trigger
 							break;
