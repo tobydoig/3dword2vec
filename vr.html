@@ -26,23 +26,168 @@
 			background-color: #444;
 			overflow: hidden;
 		}
+		
+		canvas {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+		}
     </style>
 </head>
 <body>
     <script src="three.min.js"></script>
     <script src='WebVR.js'></script>
-    <script src='keyword-data.js'></script>
+    <script src='html/keyword-data.js'></script>
     <script>
-	var clock = new THREE.Clock();
-
+	
+	function Bomb(target, radius, id) {
+		const ANIMATION_TIME = 3000;
+		const blast = new THREE.Sphere();
+		const vec3 = new THREE.Vector3();
+		const bodies = [];
+		const startTime = performance.now();
+		const col = points.geometry.getAttribute('color');
+		const edge = radius * 0.25;
+		
+		blast.set(target, radius);
+		
+		for (let ix = 0; ix < W2VDATA.length; ix++) {
+			vec3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2]);
+			dist = blast.distanceToPoint(vec3);
+			if (dist < 0) {
+				bodies.push(ix);
+			}
+			col.setXYZ(ix, 0, 0, 0);
+		}
+		col.needsUpdate = true;
+		console.log('found ' + bodies.length);
+		
+		this.update = function() {
+			let delta = performance.now() - startTime;
+			let maxColor = Math.min(delta / ANIMATION_TIME, 1.0);
+			blast.radius = (radius + edge) * maxColor;
+			
+			bodies.forEach((ix) => {
+				vec3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2])
+				let dist = blast.distanceToPoint(vec3);
+				
+				let r = 0;
+				let g = 0;
+				
+				if (dist > 0 && dist < edge) {
+					//	leading edge
+					r = (edge - dist) / edge;
+					g = 0;
+				} else if (dist < 0 && dist >= -edge) {
+					//	trailing edge
+					r = (edge + dist) / edge;
+					g = 0.0;
+				}
+				
+				dist = radius + dist;
+				dist = dist / radius;
+				
+				if (ix === id) {
+					console.log('dist = ' + dist + ', maxColor=' + maxColor);
+				}
+//				let distanceToWavePeak = maxColor
+//				let newColor = Math.max(0, 4-2*Math.abs(dist-distanceToWavePeak));
+//				col.setXYZ(ix, Math.min(newColor, 0, 0);
+				col.setXYZ(ix, r, g, 0);
+			});
+			col.needsUpdate = true;
+			
+			return delta >= ANIMATION_TIME;
+		};
+	}
+	
+	function HUD() {
+		const _this = this;
+		const FONT_SIZE = 12;
+		const MAX_TEXT_LINES = 10;
+		const text = [];
+		let lastNow = performance.now();
+		let lastFps = 0;
+		let duration = 0;
+		let fps = 0;
+		
+		function init() {
+			_this.width = 1024;//window.innerWidth;
+			_this.height = 512;//window.innerHeight;
+			_this.canvas = document.createElement('canvas');
+			_this.canvas.width = _this.width;
+			_this.canvas.height = _this.height;
+			
+			_this.context = _this.canvas.getContext('2d');
+			_this.context.textAlign = 'left';
+			_this.context.fillStyle = 'rgba(250, 250, 250, 0.75)';
+			_this.context.font = FONT_SIZE + 'px Helvetica';
+			
+			_this.camera = new THREE.OrthographicCamera(-_this.width / 2, _this.width / 2, _this.height / 2, -_this.height / 2, 0, 30 );
+			
+			_this.scene = new THREE.Scene();
+			
+			_this.texture = new THREE.Texture(_this.canvas);
+			_this.texture.needsUpdate = true;
+			
+			let material = new THREE.MeshBasicMaterial({ map: _this.texture });
+			material.transparent = true;
+			
+			_this.plane = new THREE.Mesh(new THREE.PlaneGeometry(_this.width, _this.height), material);
+			_this.scene.add(_this.plane);
+		}
+		
+		this.update = function() {
+			let now = performance.now();
+			duration += (now - lastNow);
+			lastNow = now;
+			
+			++fps;
+			if (duration > 1000) {
+				duration = 0;
+				lastFps = fps;
+				fps = 0;
+			}
+			
+			_this.context.clearRect(0, 0, _this.width, _this.height);
+			_this.context.fillStyle = 'rgba(0, 0, 80, 0.7)';
+			_this.context.fillRect(0, 0, 150, MAX_TEXT_LINES * FONT_SIZE);
+			
+			_this.context.fillStyle = 'rgba(200, 200, 200, 1)';
+			text.forEach((t, i) => {
+				_this.context.fillText(t, 10, ++i * FONT_SIZE);
+			});
+			_this.texture.needsUpdate = true;
+			
+			_this.context.fillText(lastFps, 10, 400);
+		}
+		
+		this.appendText = function(s) {
+			if (text.length) {
+				if (text[text.length - 1] === s) {
+					return;
+				}
+			}
+			text.push(s);
+			if (text.length > MAX_TEXT_LINES) {
+				text.splice(0, 1);
+			}
+		};
+		
+		init();
+	}
+	
 	var COLOR_RED = new THREE.Color(0xff0000);
 	var COLOR_GREEN = new THREE.Color(0x00ff00);
-	var MAX_XY = 1000;
-	var POINT_SIZE = 0.1;
+	var COLOR_WHITE = new THREE.Color(0xffffff);
+	var MAX_XY = 100;
+	var POINT_SIZE = MAX_XY / 100;
 
-	var renderer = new THREE.WebGLRenderer( { antialias: true } );
+	var renderer = new THREE.WebGLRenderer( { antialias: false } );
 	renderer.setPixelRatio( window.devicePixelRatio );
 	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.autoClear = false;
 	renderer.vr.enabled  = true;
 	document.body.appendChild( renderer.domElement );
 	document.body.appendChild( WEBVR.createButton( renderer, { frameOfReferenceType: 'eye-level' } ) );
@@ -68,6 +213,16 @@
 	);
 	camera.add(crosshair);
 	crosshair.position.z = -0.1;
+	
+	var arrowHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0));
+	camera.add(arrowHelper);
+	arrowHelper.position.set(0, 0, -2);
+	arrowHelper.visible = false;
+	
+	var hud = new HUD();
+	hud.appendText('line 1');
+	hud.appendText('line 2');
+	hud.appendText('line 3');
 	
 	var positions = new Float32Array(W2VDATA.length * 3);
 	var colours = new Float32Array(W2VDATA.length * 3);
@@ -99,9 +254,9 @@
 		
 		let ix = 0;
 		W2VDATA.forEach((e, i) => {
-			let x = (e[1] - min) / diff;
-			let y = (e[2] - min) / diff;
-			let z = (e[3] - min) / diff;
+			let x = e[1];//(e[1] - min) / diff;
+			let y = e[2];//(e[2] - min) / diff;
+			let z = e[3];//(e[3] - min) / diff;
 			let c = palette[e[4]];	// make sure e[4] is < CLUSTERS (in w2v.py)
 			
 			positions[ix] = x * MAX_XY;
@@ -126,9 +281,12 @@
 		points = new THREE.Points( geometry, material );
 		scene.add( points );
 		
-		geometry.translate(-geometry.boundingSphere.center.x, -geometry.boundingSphere.center.y, -geometry.boundingSphere.center.z);
+//		geometry.translate(-geometry.boundingSphere.center.x, -geometry.boundingSphere.center.y, -geometry.boundingSphere.center.z);
 		
-		player.lookAt(geometry.boundingSphere.center);
+		player.position.set(0, 0, geometry.boundingSphere.radius);
+		//player.lookAt(geometry.boundingSphere.center);
+		//player.rotateX(Math.PI);
+		
 	})();
 	
 	function onWindowResize() {
@@ -157,7 +315,7 @@
 		}
 	});
 	
-	const KEY_BOOST = 0.1;
+	const KEY_BOOST = 1;
 	window.addEventListener('keydown', (e) => {
 		switch (e.key) {
 			case 'w':
@@ -182,7 +340,7 @@
 	let ZAxisRotation = new THREE.Vector3(0, 0, 1);
 	let MAX_ROT_RADIANS = (2 * Math.PI) / 720;
 	let RADIANS_90_DEGREES = Math.PI / 2;
-	var FLY_SPEED = 0.5;
+	var FLY_SPEED = MAX_XY / 50;
 	var labels = {};
 	let tempQuaternion = new THREE.Quaternion();
 	let tempVector3 = new THREE.Vector3();
@@ -194,122 +352,237 @@
 	let Z90AxisQuaternion = new THREE.Quaternion();
 	Z90AxisQuaternion.setFromAxisAngle(ZAxisRotation, RADIANS_90_DEGREES);
 	
-	function render() {
-		if (gamepad) {
-			let s = '';
-			gamepad.axes.forEach((a, i) => {
-				if (Math.abs(a - lastAxes[i]) > 0.1) {
-					switch (i) {
-						case 0: //	left Horiz
+	function vrModePlayerControls() {
+		let s = '';
+		gamepad.axes.forEach((a, i) => {
+			if (Math.abs(a - lastAxes[i]) > 0.1) {
+				switch (i) {
+					case 0: //	left Horiz
+						player.translateX(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
+						break;
+					case 1: //	left Vert
+						player.translateZ(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
+						break;
+					case 2: //	right Horiz
+						camera.getWorldQuaternion(tempQuaternion);
+						tempQuaternion.multiply(Y90AxisQuaternion);
+						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+						player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
+						break;
+					case 5: //	right Vert
+						camera.getWorldQuaternion(tempQuaternion);
+						tempQuaternion.multiply(Z90AxisQuaternion);
+						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+						player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
+						break;
+					default:
+						break;
+				}
+			}
+		});
+			
+		gamepad.buttons.forEach((b, i) => {
+			if (b.pressed) {
+				switch (i) {
+					case 0:	//	square
+						break;
+					case 1:	//	x
+						//if (b.pressed) {
+						//	camera.getWorldDirection(tempVector3);
+						//	player.position.add(tempVector3.multiplyScalar(FLY_SPEED * 2));
+						//}
+						break;
+					case 2:	//	circle
+						break;
+					case 3:	//	triangle
+						break;
+					case 4:	//	left 2
+						camera.getWorldQuaternion(tempQuaternion);
+						tempQuaternion.multiply(X90AxisQuaternion);
+						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+						player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
+						break;
+					case 5:	//	right 2
+						camera.getWorldQuaternion(tempQuaternion);
+						tempQuaternion.multiply(X90AxisQuaternion);
+						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
+						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
+						player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
+						break;
+					case 6:	//	left trigger
+						break;
+					case 7:	//	right trigger
+					default:
+						break;
+				}
+			}
+		});
+	}
+	
+	function nonVrModePlayerControls() {
+		let s = '';
+		gamepad.axes.forEach((a, i) => {
+			if (Math.abs(a - lastAxes[i]) > 0.1) {
+				switch (i) {
+					case 0: //	left Horiz
 //							camera.getWorldDirection(tempVector3);
 //				player.position.add(tempVector3.applyAxisAngle(YAxisRotation, -RADIANS_90_DEGREES).multiplyScalar(FLY_SPEED * a));
-							player.translateX(FLY_SPEED * a);
-		//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-							break;
-						case 1: //	left Vert
+						player.translateX(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
+	//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+						break;
+					case 1: //	left Vert
 //							camera.getWorldDirection(tempVector3);
 //				player.position.sub(tempVector3.multiplyScalar(FLY_SPEED * a));
-							player.translateZ(FLY_SPEED * a);
-		//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-							break;
-						case 2: //	right Horiz
-							camera.getWorldQuaternion(tempQuaternion);
-							tempQuaternion.multiply(Y90AxisQuaternion);
-							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
-//							player.rotateY(-MAX_ROT_RADIANS * a);
-		//							console.log('right horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-							break;
-						case 5: //	right Vert
-							camera.getWorldQuaternion(tempQuaternion);
-							tempQuaternion.multiply(Z90AxisQuaternion);
-							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
-//							player.rotateX(MAX_ROT_RADIANS * a);
-		//							console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-							break;
-						default:
-							break;
-					}
+						player.translateZ(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
+	//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
+						break;
+					case 2: //	right Horiz
+							player.rotateY(-MAX_ROT_RADIANS * a);
+						break;
+					case 5: //	right Vert
+							player.rotateX(MAX_ROT_RADIANS * a);
+						break;
+					default:
+						break;
 				}
-			});
-				
-	//			raycaster.setFromCamera( { x: 0, y: 0 }, camera );
-	//			var hits = raycaster.intersectObjects( [points] );
-	//			if (hits.length) {
-	//				crosshair.material.color = COLOR_GREEN;
-	//			} else {
-	//				crosshair.material.color = COLOR_RED;
-	//			}
-				
-			gamepad.buttons.forEach((b, i) => {
-				if (b.pressed) {
-					//console.log("pressed " + i);
-					switch (i) {
-						case 0:	//	square
-							break;
-						case 1:	//	x
-							if (b.pressed) {
-								camera.getWorldDirection(tempVector3);
-				player.position.add(tempVector3.multiplyScalar(FLY_SPEED * 2));
+			}
+		});
+			
+		gamepad.buttons.forEach((b, i) => {
+			if (b.pressed) {
+				switch (i) {
+					case 0:	//	square
+						break;
+					case 1:	//	x
+//						if (b.pressed) {
 //								player.translateZ(-FLY_SPEED * 4);
-	//								console.log('right vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-							}
-							break;
-						case 2:	//	circle
-							if (hits.length) {
-								let hit = hits[0];
-								let a = hit.object.geometry.getAttribute('position');
-								let txt = W2VDATA[hit.index][0];
-								console.log(hit.index + ' - ' + txt);
-								
-								//if (gamepad.buttons[2].pressed) {
-									if (!labels.hasOwnProperty(hit.index)) {
-										let label = makeTextSprite(txt, {fontstyle: 'white'});
-										scene.add(label);
-										label.position.fromBufferAttribute(a, hit.index);
-										label.translateX(-50);
-										label.translateY(300);
-										labels[hit.index] = label;
-									}
-								//}
-							}
-							break;
-						case 3:	//	triangle
-							break;
-						case 4:	//	left 2
-							camera.getWorldQuaternion(tempQuaternion);
-							tempQuaternion.multiply(X90AxisQuaternion);
-							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
+//						}
+						break;
+					case 2:	//	circle
+						break;
+					case 3:	//	triangle
+						break;
+					case 4:	//	left 2
 //							camera.getWorldDirection(tempVector3);
 //							player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
-//							player.rotateZ(-MAX_ROT_RADIANS);
-							break;
-						case 5:	//	right 2
-							camera.getWorldQuaternion(tempQuaternion);
-							tempQuaternion.multiply(X90AxisQuaternion);
-							tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-							tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-							player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
+							player.rotateZ(-MAX_ROT_RADIANS);
+						break;
+					case 5:	//	right 2
 //							camera.getWorldDirection(tempVector3);
 //							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
-//							player.rotateZ(MAX_ROT_RADIANS);
-							break;
-						case 6:	//	left trigger
-							break;
-						case 7:	//	right trigger
-						default:
-							break;
-					}
+							player.rotateZ(MAX_ROT_RADIANS);
+						break;
+					case 6:	//	left trigger
+						break;
+					case 7:	//	right trigger
+					default:
+						break;
 				}
-			});
+			}
+		});
+	}
+	
+	let rayOrigin = new THREE.Vector3(0, 0, 2);
+	let raycaster = new THREE.Raycaster();
+	raycaster.params.Points.threshold = 32;
+
+	let myball = new THREE.Mesh(new THREE.SphereBufferGeometry(POINT_SIZE * 5), new THREE.MeshBasicMaterial( { color: 0xffffff }));
+	scene.add(myball);
+	myball.visible = false;
+	
+	function render() {
+//		points.rotateY(0.001);
+		if (gamepad) {
+			if (renderer.vr && renderer.vr.isPresenting()) {
+				vrModePlayerControls();
+			} else {
+				nonVrModePlayerControls();
+			}
+		}
+			
+		if (myball.visible) {
+			myball.getWorldPosition(tempVector3);
+			camera.worldToLocal(tempVector3);
+			arrowHelper.setDirection(tempVector3.normalize());
+			
+			if (gamepad && gamepad.buttons[3].pressed) {
+				bombs.push(new Bomb(myball.position, 1000, -1));
+			}			
 		}
 		
+		raycaster.setFromCamera( rayOrigin, camera );
+		var hits = raycaster.intersectObjects( [points] );
+		if (hits.length) {
+			crosshair.material.color = COLOR_GREEN;
+				
+			let hit = hits[0];
+			let a = hit.object.geometry.getAttribute('position');
+			let c = hit.object.geometry.getAttribute('color');
+			let txt = W2VDATA[hit.index][0];
+				
+			hud.appendText(txt);
+			
+			if (gamepad) {
+				if (gamepad.buttons[2].pressed) {
+					c.setXYZ(hit.index, COLOR_WHITE.r, COLOR_WHITE.g, COLOR_WHITE.b);
+					c.needsUpdate = true;
+					
+					myball.position.fromBufferAttribute(a, hit.index);
+					myball.visible = true;
+					
+					myball.getWorldPosition(tempVector3);
+					camera.worldToLocal(tempVector3);
+					arrowHelper.setDirection(tempVector3.normalize());
+					arrowHelper.visible = true;
+				}
+			}
+		} else {
+			crosshair.material.color = COLOR_RED;
+			
+			if (gamepad && gamepad.buttons[2].pressed) {
+				myball.visible = false;
+				arrowHelper.visible = false;
+			}
+		}
+		
+		let reset = !bombs.length;
+		bombs.forEach((b, i) => {
+			if (b.update()) {
+				bombs.splice(i, 1);
+			}
+		});
+		if (reset && !bombs.length) {
+			const col = points.geometry.getAttribute('color');
+			
+			for (let ix = 0; ix < W2VDATA.length; ix++) {
+				col.setXYZ(ix, colours[ix * 3], colours[ix * 3 + 1], colours[ix * 3 + 2]);
+			}
+			col.needsUpdate = true;
+		}
+		
+		hud.update();
 		renderer.render(scene, camera);
+		renderer.render(hud.scene, hud.camera);
+	}
+	
+	var bombs = [];
+	
+	function bomb(s, r) {
+		let ix = W2VDATA.findIndex((e) => { return e[0] === s; });
+		
+		console.log(s + ' found at ' + ix);
+		if (ix < 0) {
+			return;
+		}
+		
+		let a = points.geometry.getAttribute('position');
+		let t = new THREE.Vector3();
+		t.fromBufferAttribute(a, ix);
+		
+		bombs.push(new Bomb(t, r, ix));
 	}
 	
 	renderer.setAnimationLoop( render );
