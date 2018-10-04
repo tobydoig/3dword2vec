@@ -38,7 +38,7 @@
 <body>
     <script src="three.min.js"></script>
     <script src='WebVR.js'></script>
-    <script src='html/keyword-data.js'></script>
+    <script src='keyword-data.js'></script>
     <script>
 	
 	function Bomb(target, radius, id) {
@@ -91,9 +91,6 @@
 				if (ix === id) {
 					console.log('dist = ' + dist + ', maxColor=' + maxColor);
 				}
-//				let distanceToWavePeak = maxColor
-//				let newColor = Math.max(0, 4-2*Math.abs(dist-distanceToWavePeak));
-//				col.setXYZ(ix, Math.min(newColor, 0, 0);
 				col.setXYZ(ix, r, g, 0);
 			});
 			col.needsUpdate = true;
@@ -103,42 +100,25 @@
 	}
 	
 	function HUD() {
-		const _this = this;
 		const FONT_SIZE = 12;
 		const MAX_TEXT_LINES = 10;
 		const text = [];
+		
 		let lastNow = performance.now();
 		let lastFps = 0;
 		let duration = 0;
 		let fps = 0;
 		
-		function init() {
-			_this.width = 1024;//window.innerWidth;
-			_this.height = 512;//window.innerHeight;
-			_this.canvas = document.createElement('canvas');
-			_this.canvas.width = _this.width;
-			_this.canvas.height = _this.height;
-			
-			_this.context = _this.canvas.getContext('2d');
-			_this.context.textAlign = 'left';
-			_this.context.fillStyle = 'rgba(250, 250, 250, 0.75)';
-			_this.context.font = FONT_SIZE + 'px Helvetica';
-			
-			_this.camera = new THREE.OrthographicCamera(-_this.width / 2, _this.width / 2, _this.height / 2, -_this.height / 2, 0, 30 );
-			
-			_this.scene = new THREE.Scene();
-			
-			_this.texture = new THREE.Texture(_this.canvas);
-			_this.texture.needsUpdate = true;
-			
-			let material = new THREE.MeshBasicMaterial({ map: _this.texture });
-			material.transparent = true;
-			
-			_this.plane = new THREE.Mesh(new THREE.PlaneGeometry(_this.width, _this.height), material);
-			_this.scene.add(_this.plane);
-		}
+		let canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 512;
+        let context = canvas.getContext('2d');
+        let texture = new THREE.Texture(canvas);
+        let material = new THREE.MeshBasicMaterial({ map: texture, depthTest: false, transparent: true });
+        let geometry = new THREE.PlaneGeometry(1, 1, 1, 1);
+        this.plane = new THREE.Mesh(geometry, material);
 		
-		this.update = function() {
+		function updateFps() {
 			let now = performance.now();
 			duration += (now - lastNow);
 			lastNow = now;
@@ -148,20 +128,52 @@
 				duration = 0;
 				lastFps = fps;
 				fps = 0;
+				
+				return true;
 			}
 			
-			_this.context.clearRect(0, 0, _this.width, _this.height);
-			_this.context.fillStyle = 'rgba(0, 0, 80, 0.7)';
-			_this.context.fillRect(0, 0, 150, MAX_TEXT_LINES * FONT_SIZE);
-			
-			_this.context.fillStyle = 'rgba(200, 200, 200, 1)';
-			text.forEach((t, i) => {
-				_this.context.fillText(t, 10, ++i * FONT_SIZE);
-			});
-			_this.texture.needsUpdate = true;
-			
-			_this.context.fillText(lastFps, 10, 400);
+			return false;
 		}
+		
+		let label = null;
+		let lpos = new THREE.Vector2();
+		this.label = function(s, x, y) {
+			if (s !== null) {
+				label = s;
+				lpos.set(x, y);
+				redraw();
+			} else {
+				label = null;
+			}
+		};
+		
+		function redraw() {
+			context.clearRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = "rgba(0, 0, 80, 0.3)";
+			context.fillRect(0, 0, canvas.width, canvas.height);
+            context.strokeStyle = "#ff0000";
+			context.strokeRect(0, 0, canvas.width, canvas.height);
+			
+			context.font = "12pt Calibri";
+            context.fillStyle = "#aaaaaa";
+            context.fillStyle = 'rgba(200, 200, 200, 1)';
+			text.forEach((t, i) => {
+				context.fillText(t, 1, ++i * FONT_SIZE);
+			});
+			context.fillText(lastFps, 990, FONT_SIZE);
+			
+			if (label !== null) {
+				context.fillText(s, lpos.x, lpos.y);
+			}
+			
+			texture.needsUpdate = true;
+		};
+		
+		this.update = () => {
+			if (updateFps()) {
+				redraw();
+			}
+		};
 		
 		this.appendText = function(s) {
 			if (text.length) {
@@ -173,9 +185,9 @@
 			if (text.length > MAX_TEXT_LINES) {
 				text.splice(0, 1);
 			}
+			
+			redraw();
 		};
-		
-		init();
 	}
 	
 	var COLOR_RED = new THREE.Color(0xff0000);
@@ -220,9 +232,9 @@
 	arrowHelper.visible = false;
 	
 	var hud = new HUD();
-	hud.appendText('line 1');
-	hud.appendText('line 2');
-	hud.appendText('line 3');
+	camera.add(hud.plane);
+	hud.plane.position.set(0.0, 0.0, -2.0);
+	hud.plane.scale.set(4.9, 2.8, 1.0);
 	
 	var positions = new Float32Array(W2VDATA.length * 3);
 	var colours = new Float32Array(W2VDATA.length * 3);
@@ -531,6 +543,7 @@
 					c.needsUpdate = true;
 					
 					myball.position.fromBufferAttribute(a, hit.index);
+					myball.hitindex = hit.index;
 					myball.visible = true;
 					
 					myball.getWorldPosition(tempVector3);
@@ -544,6 +557,7 @@
 			
 			if (gamepad && gamepad.buttons[2].pressed) {
 				myball.visible = false;
+				myball.hitindex = 0;
 				arrowHelper.visible = false;
 			}
 		}
@@ -563,9 +577,17 @@
 			col.needsUpdate = true;
 		}
 		
+		if (myball.visible) {
+			let vector2 = myball.position.project(camera);
+			vector.x = (vector.x + 1) / 2 * window.innerWidth;
+			vector.y = -(vector.y - 1) / 2 * window.innerHeight;
+			hud.label(W2VDATA[myball.hitindex][0], vector.x, vector.y);
+		} else {
+			hud.label(null);
+		}
+		
 		hud.update();
 		renderer.render(scene, camera);
-		renderer.render(hud.scene, hud.camera);
 	}
 	
 	var bombs = [];

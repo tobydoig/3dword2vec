@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>three.js test</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+    <style>
+		body canvas {
+			margin: 0;
+			padding: 0;
+			width: 100%;
+			height: 100%;
+		}
+		body { overflow: hidden; }
+    </style>
+</head>
+<body>
+    <script src="three.min.js"></script>
+    <script src='WebVR.js'></script>
+    <script src='OrbitControls.js'></script>
+    <script>
+	function HUD() {
+		let canvas = document.createElement('canvas');
+        canvas.width = 1024;
+        canvas.height = 512;
+        let context = canvas.getContext('2d');
+        let texture = new THREE.Texture(canvas);
+        let material = new THREE.MeshBasicMaterial({ map: texture, depthTest: false, transparent: true });
+        let geometry = new THREE.PlaneGeometry(1, 1, 1, 1);
+        this.plane = new THREE.Mesh(geometry, material);
+		
+		this.update = () => {
+			context.clearRect(0, 0, canvas.width, canvas.height);
+            context.fillStyle = "rgba(0, 0, 80, 0.3)";
+			context.fillRect(0, 0, canvas.width, canvas.height);
+            context.strokeStyle = "#ff0000";
+			context.strokeRect(0, 0, canvas.width, canvas.height);
+			
+			context.font = "12pt Calibri";
+            context.fillStyle = "#aaaaaa";
+            context.fillText(new Date().toTimeString(), 1, 20);
+			
+			texture.needsUpdate = true;
+		};
+	}
+	
+	var renderer = new THREE.WebGLRenderer( { antialias: false } );
+	renderer.setPixelRatio( window.devicePixelRatio );
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.autoClear = false;
+	renderer.vr.enabled  = true;
+	document.body.appendChild( renderer.domElement );
+	document.body.appendChild( WEBVR.createButton( renderer, { /* frameOfReferenceType: 'eye-level' */ } ) );
+	
+	var scene = new THREE.Scene();
+	scene.background = new THREE.Color( 0x0 );
+	
+	var player = new THREE.Group();
+	scene.add(player);
+	
+	var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, -1);
+	player.add(camera);
+	
+	var cube = new THREE.Mesh( new THREE.BoxBufferGeometry( 1, 1, 1 ), new THREE.MeshBasicMaterial( {color: 0x00aa00} ) );
+	scene.add( cube );
+
+	var controls = new THREE.OrbitControls(camera, renderer.domElement);
+	
+	var cameraHelper = new THREE.CameraHelper( camera );
+	scene.add( cameraHelper );
+
+	var hud = new HUD();
+	camera.add(hud.plane);
+//	hud.plane.position.set(-2.4, 0.8, -2);
+
+	hud.plane.position.set(0.0, 0.0, -2.0);
+	hud.plane.scale.set(4.9, 2.8, 1.0);
+	
+	window.addEventListener( 'resize', (e) => {
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+		renderer.setSize( window.innerWidth, window.innerHeight );
+	}, false );
+	
+	function render() {
+		hud.update();
+		controls.update();
+		renderer.render(scene, camera);
+	}
+	
+	renderer.setAnimationLoop( render );
+    </script>
+  </body>
+</html>
