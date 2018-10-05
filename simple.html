@@ -17,7 +17,6 @@
 <body>
     <script src="three.min.js"></script>
     <script src='WebVR.js'></script>
-    <script src='OrbitControls.js'></script>
     <script>
 	function HUD() {
 		let canvas = document.createElement('canvas');
@@ -29,7 +28,10 @@
         let geometry = new THREE.PlaneGeometry(1, 1, 1, 1);
         this.plane = new THREE.Mesh(geometry, material);
 		
-		this.update = () => {
+		let position = new THREE.Vector3();
+		let vector = new THREE.Vector3();
+			
+		this.update = (s) => {
 			context.clearRect(0, 0, canvas.width, canvas.height);
             context.fillStyle = "rgba(0, 0, 80, 0.3)";
 			context.fillRect(0, 0, canvas.width, canvas.height);
@@ -39,6 +41,13 @@
 			context.font = "12pt Calibri";
             context.fillStyle = "#aaaaaa";
             context.fillText(new Date().toTimeString(), 1, 20);
+			
+			sphere.getWorldPosition(position);
+			vector = position.project(camera);
+			vector.x = (vector.x + 1) / 2 * canvas.width;
+			vector.y = -(vector.y - 1) / 2 * canvas.height;
+            context.fillText(s, vector.x, vector.y);
+            context.fillText('pos = ' + vector.x + ', ' + vector.y, 1, 35);
 			
 			texture.needsUpdate = true;
 		};
@@ -57,6 +66,7 @@
 	
 	var player = new THREE.Group();
 	scene.add(player);
+	player.position.set(0, -1.6, 2);
 	
 	var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, -1);
 	player.add(camera);
@@ -64,7 +74,9 @@
 	var cube = new THREE.Mesh( new THREE.BoxBufferGeometry( 1, 1, 1 ), new THREE.MeshBasicMaterial( {color: 0x00aa00} ) );
 	scene.add( cube );
 
-	var controls = new THREE.OrbitControls(camera, renderer.domElement);
+	var sphere = new THREE.Mesh( new THREE.SphereBufferGeometry( 0.05, 32, 32 ), new THREE.MeshBasicMaterial( {color: 0xffff00} ));
+	cube.add(sphere);
+	sphere.position.set(0.5, 0.5, 0.5);
 	
 	var cameraHelper = new THREE.CameraHelper( camera );
 	scene.add( cameraHelper );
@@ -82,9 +94,13 @@
 		renderer.setSize( window.innerWidth, window.innerHeight );
 	}, false );
 	
+	let tmpV3 = new THREE.Vector3();
 	function render() {
-		hud.update();
-		controls.update();
+		cube.rotateX(0.005);
+		cube.rotateY(-0.01);
+		cube.rotateZ(0.01);
+		sphere.getWorldPosition(tmpV3);
+		hud.update(tmpV3.x.toFixed(2) + ', ' + tmpV3.y.toFixed(2) + ', ' + tmpV3.z.toFixed(2));
 		renderer.render(scene, camera);
 	}
 	

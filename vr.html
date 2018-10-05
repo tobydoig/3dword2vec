@@ -38,7 +38,7 @@
 <body>
     <script src="three.min.js"></script>
     <script src='WebVR.js'></script>
-    <script src='keyword-data.js'></script>
+    <script src='html/keyword-data.js'></script>
     <script>
 	
 	function Bomb(target, radius, id) {
@@ -118,6 +118,21 @@
         let geometry = new THREE.PlaneGeometry(1, 1, 1, 1);
         this.plane = new THREE.Mesh(geometry, material);
 		
+		const labels = {};
+		const labelsList = [];
+		const MAX_LABELS = 20;
+		this.addLabel = function(ix) {
+			if (!labels.hasOwnProperty(ix)) {
+				if (labelsList.length >= MAX_LABELS) {
+					let old = labelsList.splice(0, 1);
+					delete labels[old];
+				}
+				labels[ix] = true;
+				labelsList.push(ix);
+				appendText(W2VDATA[ix][0]);
+			}
+		};
+		
 		function updateFps() {
 			let now = performance.now();
 			duration += (now - lastNow);
@@ -135,17 +150,14 @@
 			return false;
 		}
 		
-		let label = null;
-		let lpos = new THREE.Vector2();
-		this.label = function(s, x, y) {
-			if (s !== null) {
-				label = s;
-				lpos.set(x, y);
-				redraw();
-			} else {
-				label = null;
-			}
+		this.update = function() {
+			updateFps();
+			redraw();
 		};
+		
+		let frustum = new THREE.Frustum();
+		let m4 = new THREE.Matrix4();
+		let v3 = new THREE.Vector3();
 		
 		function redraw() {
 			context.clearRect(0, 0, canvas.width, canvas.height);
@@ -162,20 +174,23 @@
 			});
 			context.fillText(lastFps, 990, FONT_SIZE);
 			
-			if (label !== null) {
-				context.fillText(s, lpos.x, lpos.y);
+			if (labelsList.length) {
+				frustum.setFromMatrix( m4.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse ) );
+				labelsList.forEach((ix) => {
+					v3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2]);
+					if (frustum.containsPoint(v3)) {
+						let v2 = v3.project(camera);
+						v2.x = (v2.x + 1) / 2 * canvas.width;
+						v2.y = -(v2.y - 1) / 2 * canvas.height;
+						context.fillText(W2VDATA[ix][0], v2.x, v2.y);
+					}
+				});
 			}
 			
 			texture.needsUpdate = true;
 		};
 		
-		this.update = () => {
-			if (updateFps()) {
-				redraw();
-			}
-		};
-		
-		this.appendText = function(s) {
+		function appendText(s) {
 			if (text.length) {
 				if (text[text.length - 1] === s) {
 					return;
@@ -185,8 +200,6 @@
 			if (text.length > MAX_TEXT_LINES) {
 				text.splice(0, 1);
 			}
-			
-			redraw();
 		};
 	}
 	
@@ -499,7 +512,7 @@
 	
 	let rayOrigin = new THREE.Vector3(0, 0, 2);
 	let raycaster = new THREE.Raycaster();
-	raycaster.params.Points.threshold = 32;
+	raycaster.params.Points.threshold = 8;
 
 	let myball = new THREE.Mesh(new THREE.SphereBufferGeometry(POINT_SIZE * 5), new THREE.MeshBasicMaterial( { color: 0xffffff }));
 	scene.add(myball);
@@ -534,8 +547,8 @@
 			let a = hit.object.geometry.getAttribute('position');
 			let c = hit.object.geometry.getAttribute('color');
 			let txt = W2VDATA[hit.index][0];
-				
-			hud.appendText(txt);
+			
+			hud.addLabel(hit.index);
 			
 			if (gamepad) {
 				if (gamepad.buttons[2].pressed) {
@@ -575,15 +588,6 @@
 				col.setXYZ(ix, colours[ix * 3], colours[ix * 3 + 1], colours[ix * 3 + 2]);
 			}
 			col.needsUpdate = true;
-		}
-		
-		if (myball.visible) {
-			let vector2 = myball.position.project(camera);
-			vector.x = (vector.x + 1) / 2 * window.innerWidth;
-			vector.y = -(vector.y - 1) / 2 * window.innerHeight;
-			hud.label(W2VDATA[myball.hitindex][0], vector.x, vector.y);
-		} else {
-			hud.label(null);
 		}
 		
 		hud.update();
