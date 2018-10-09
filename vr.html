@@ -38,187 +38,11 @@
 <body>
     <script src="three.min.js"></script>
     <script src='WebVR.js'></script>
+    <script src='GamepadControls.js'></script>
+    <script src='HUD.js'></script>
+    <script src='Bomb.js'></script>
     <script src='html/keyword-data.js'></script>
     <script>
-	
-	function Bomb(target, radius, id) {
-		const ANIMATION_TIME = 3000;
-		const blast = new THREE.Sphere();
-		const vec3 = new THREE.Vector3();
-		const bodies = [];
-		const startTime = performance.now();
-		const col = points.geometry.getAttribute('color');
-		const edge = radius * 0.25;
-		
-		blast.set(target, radius);
-		
-		for (let ix = 0; ix < W2VDATA.length; ix++) {
-			vec3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2]);
-			dist = blast.distanceToPoint(vec3);
-			if (dist < 0) {
-				bodies.push(ix);
-			}
-			col.setXYZ(ix, 0, 0, 0);
-		}
-		col.needsUpdate = true;
-		console.log('found ' + bodies.length);
-		
-		this.update = function() {
-			let delta = performance.now() - startTime;
-			let maxColor = Math.min(delta / ANIMATION_TIME, 1.0);
-			blast.radius = (radius + edge) * maxColor;
-			
-			bodies.forEach((ix) => {
-				vec3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2])
-				let dist = blast.distanceToPoint(vec3);
-				
-				let r = 0;
-				let g = 0;
-				
-				if (dist > 0 && dist < edge) {
-					//	leading edge
-					r = (edge - dist) / edge;
-					g = 0;
-				} else if (dist < 0 && dist >= -edge) {
-					//	trailing edge
-					r = (edge + dist) / edge;
-					g = 0.0;
-				}
-				
-				dist = radius + dist;
-				dist = dist / radius;
-				
-				if (ix === id) {
-					console.log('dist = ' + dist + ', maxColor=' + maxColor);
-				}
-				col.setXYZ(ix, r, g, 0);
-			});
-			col.needsUpdate = true;
-			
-			return delta >= ANIMATION_TIME;
-		};
-	}
-	
-	function HUD() {
-		const FONT_SIZE = 12;
-		const MAX_TEXT_LINES = 10;
-		const text = [];
-		
-		let lastNow = performance.now();
-		let lastFps = 0;
-		let duration = 0;
-		let fps = 0;
-		
-		let canvas = document.createElement('canvas');
-        canvas.width = 1024;
-        canvas.height = 512;
-        let context = canvas.getContext('2d');
-        let texture = new THREE.Texture(canvas);
-        let material = new THREE.MeshBasicMaterial({ map: texture, depthTest: false, transparent: true });
-        let geometry = new THREE.PlaneGeometry(1, 1, 1, 1);
-        this.plane = new THREE.Mesh(geometry, material);
-		
-		const labels = {};
-		const labelsList = [];
-		const MAX_LABELS = 20;
-		this.addLabel = function(ix) {
-		return;
-			if (!labels.hasOwnProperty(ix)) {
-				if (labelsList.length >= MAX_LABELS) {
-					let old = labelsList.splice(0, 1);
-					delete labels[old];
-				}
-				labels[ix] = true;
-				labelsList.push(ix);
-				appendText(W2VDATA[ix][0]);
-			}
-		};
-		
-		const blast = new THREE.Sphere();
-		const MAX_DIST = 50;
-		function updateFps() {
-			let now = performance.now();
-			duration += (now - lastNow);
-			lastNow = now;
-			
-			++fps;
-			if (duration > 1000) {
-				duration = 0;
-				lastFps = fps;
-				fps = 0;
-
-				labelsList.length = 0;
-				let vec3 = new THREE.Vector3();
-				for (let ix = 0; ix < W2VDATA.length; ix++) {
-					vec3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2]);
-					let dist = player.position.distanceTo(vec3);
-					if (dist < MAX_DIST) {
-						labelsList.push(ix);
-					}
-				}
-				
-			}
-		}
-		
-		this.update = function() {
-			updateFps();
-			redraw();
-		};
-		
-		let frustum = new THREE.Frustum();
-		let m4 = new THREE.Matrix4();
-		let v3 = new THREE.Vector3();
-		
-		function redraw() {
-			context.clearRect(0, 0, canvas.width, canvas.height);
-            context.fillStyle = "rgba(0, 0, 80, 0.3)";
-			context.fillRect(0, 0, canvas.width, canvas.height);
-            context.strokeStyle = "#ff0000";
-			context.strokeRect(0, 0, canvas.width, canvas.height);
-			
-			context.font = "12pt Calibri";
-            context.fillStyle = "#aaaaaa";
-            context.fillStyle = 'rgba(200, 200, 200, 1)';
-			text.forEach((t, i) => {
-				context.fillText(t, 1, ++i * FONT_SIZE);
-			});
-			context.fillText(lastFps, 990, FONT_SIZE);
-			
-			if (labelsList.length) {
-				frustum.setFromMatrix( m4.multiplyMatrices( camera.projectionMatrix, camera.matrixWorldInverse ) );
-				labelsList.forEach((ix) => {
-					v3.set(positions[ix * 3], positions[ix * 3 + 1], positions[ix * 3 + 2]);
-					if (frustum.containsPoint(v3)) {
-						let d = v3.distanceTo(player.position);
-						if (d < MAX_DIST) {
-							d = d / MAX_DIST;
-							d = 1 - d;
-							
-							let v2 = v3.project(camera);
-							v2.x = (v2.x + 1) / 2 * canvas.width;
-							v2.y = -(v2.y - 1) / 2 * canvas.height;
-							context.font = (24 * d).toFixed(2) + "px Calibri";
-							context.fillText(W2VDATA[ix][0] + '(' + d.toFixed(2) + ')', v2.x, v2.y);
-						}
-					}
-				});
-			}
-			
-			texture.needsUpdate = true;
-		};
-		
-		function appendText(s) {
-			if (text.length) {
-				if (text[text.length - 1] === s) {
-					return;
-				}
-			}
-			text.push(s);
-			if (text.length > MAX_TEXT_LINES) {
-				text.splice(0, 1);
-			}
-		};
-	}
 	
 	var COLOR_RED = new THREE.Color(0xff0000);
 	var COLOR_GREEN = new THREE.Color(0x00ff00);
@@ -226,6 +50,11 @@
 	var MAX_XY = 100;
 	var POINT_SIZE = MAX_XY / 100;
 
+	const MAX_ROT_RADIANS = (2 * Math.PI) / 360;
+	const RADIANS_90_DEGREES = Math.PI / 2;
+	const FLY_SPEED = MAX_XY / 50;
+
+	
 	var renderer = new THREE.WebGLRenderer( { antialias: false } );
 	renderer.setPixelRatio( window.devicePixelRatio );
 	renderer.setSize( window.innerWidth, window.innerHeight );
@@ -263,8 +92,8 @@
 	
 	var hud = new HUD();
 	camera.add(hud.plane);
-	hud.plane.position.set(0.0, 0.0, -2.0);
-	hud.plane.scale.set(4.9, 2.8, 1.0);
+	hud.plane.position.set(0.0, 0.0, -0.1);
+	hud.plane.scale.set(0.13 * ASPECT, 0.13, 1.0);
 	
 	var positions = new Float32Array(W2VDATA.length * 3);
 	var colours = new Float32Array(W2VDATA.length * 3);
@@ -334,12 +163,12 @@
 	function onWindowResize() {
 		camera.aspect = window.innerWidth / window.innerHeight;
 		camera.updateProjectionMatrix();
+		hud.plane.scale.set(0.13 * camera.aspect, 0.13, 1.0);
 		renderer.setSize( window.innerWidth, window.innerHeight );
 	}
 	window.addEventListener( 'resize', onWindowResize, false );
 	
 	var gamepad = null;
-	var lastAxes = null;
 
 	window.addEventListener("gamepaddisconnected", function(e) {
 		console.log("Gamepad disconnected at index %d", e.gamepad.index);
@@ -352,180 +181,43 @@
 		e.gamepad.buttons.length, e.gamepad.axes.length);
 		
 		if (!gamepad && e.gamepad.id === '054c-09cc-Wireless Controller') {
-			gamepad = e.gamepad;
-			lastAxes = gamepad.axes.slice();
+			gamepad = new GamepadControls(e.gamepad, { FLY_SPEED: FLY_SPEED, MAX_ROT_RADIANS: MAX_ROT_RADIANS });
 		}
 	});
 	
-	const KEY_BOOST = 1;
+	const KEY_BOOST = 16;
 	window.addEventListener('keydown', (e) => {
 		switch (e.key) {
-			case 'w':
+			case 'W':
 //				player.translateZ(-FLY_SPEED * KEY_BOOST);
 				player.position.add(camera.getWorldDirection().multiplyScalar(FLY_SPEED * KEY_BOOST));
 				break;
-			case 's':
+			case 'w':
+//				player.translateZ(-FLY_SPEED * KEY_BOOST);
+				player.position.add(camera.getWorldDirection().multiplyScalar(FLY_SPEED));
+				break;
+			case 'S':
 //				player.translateZ(FLY_SPEED * KEY_BOOST);
 				player.position.add(camera.getWorldDirection().multiplyScalar(-FLY_SPEED * KEY_BOOST));
 				break;
-			case 'a':
+			case 's':
+				player.position.add(camera.getWorldDirection().multiplyScalar(-FLY_SPEED));
+				break;
+			case 'A':
 				player.translateX(-FLY_SPEED * KEY_BOOST);
 				break;
-			case 'd':
+			case 'a':
+				player.translateX(-FLY_SPEED);
+				break;
+			case 'D':
 				player.translateX(FLY_SPEED * KEY_BOOST);
+				break;
+			case 'd':
+				player.translateX(FLY_SPEED);
 				break;
 		}
 	});
 	
-	let XAxisRotation = new THREE.Vector3(1, 0, 0);
-	let YAxisRotation = new THREE.Vector3(0, 1, 0);
-	let ZAxisRotation = new THREE.Vector3(0, 0, 1);
-	let MAX_ROT_RADIANS = (2 * Math.PI) / 720;
-	let RADIANS_90_DEGREES = Math.PI / 2;
-	var FLY_SPEED = MAX_XY / 50;
-	var labels = {};
-	let tempQuaternion = new THREE.Quaternion();
-	let tempVector3 = new THREE.Vector3();
-	let tempMatrix4 = new THREE.Matrix4();
-	let X90AxisQuaternion = new THREE.Quaternion();
-	X90AxisQuaternion.setFromAxisAngle(XAxisRotation, RADIANS_90_DEGREES);
-	let Y90AxisQuaternion = new THREE.Quaternion();
-	Y90AxisQuaternion.setFromAxisAngle(YAxisRotation, RADIANS_90_DEGREES);
-	let Z90AxisQuaternion = new THREE.Quaternion();
-	Z90AxisQuaternion.setFromAxisAngle(ZAxisRotation, RADIANS_90_DEGREES);
-	
-	function vrModePlayerControls() {
-		let s = '';
-		gamepad.axes.forEach((a, i) => {
-			if (Math.abs(a - lastAxes[i]) > 0.1) {
-				switch (i) {
-					case 0: //	left Horiz
-						player.translateX(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
-						break;
-					case 1: //	left Vert
-						player.translateZ(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
-						break;
-					case 2: //	right Horiz
-						camera.getWorldQuaternion(tempQuaternion);
-						tempQuaternion.multiply(Y90AxisQuaternion);
-						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-						player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
-						break;
-					case 5: //	right Vert
-						camera.getWorldQuaternion(tempQuaternion);
-						tempQuaternion.multiply(Z90AxisQuaternion);
-						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-						player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS * a);
-						break;
-					default:
-						break;
-				}
-			}
-		});
-			
-		gamepad.buttons.forEach((b, i) => {
-			if (b.pressed) {
-				switch (i) {
-					case 0:	//	square
-						break;
-					case 1:	//	x
-						//if (b.pressed) {
-						//	camera.getWorldDirection(tempVector3);
-						//	player.position.add(tempVector3.multiplyScalar(FLY_SPEED * 2));
-						//}
-						break;
-					case 2:	//	circle
-						break;
-					case 3:	//	triangle
-						break;
-					case 4:	//	left 2
-						camera.getWorldQuaternion(tempQuaternion);
-						tempQuaternion.multiply(X90AxisQuaternion);
-						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-						player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
-						break;
-					case 5:	//	right 2
-						camera.getWorldQuaternion(tempQuaternion);
-						tempQuaternion.multiply(X90AxisQuaternion);
-						tempMatrix4.makeRotationFromQuaternion(tempQuaternion);
-						tempVector3.setFromMatrixColumn(tempMatrix4, 1);
-						player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
-						break;
-					case 6:	//	left trigger
-						break;
-					case 7:	//	right trigger
-					default:
-						break;
-				}
-			}
-		});
-	}
-	
-	function nonVrModePlayerControls() {
-		let s = '';
-		gamepad.axes.forEach((a, i) => {
-			if (Math.abs(a - lastAxes[i]) > 0.1) {
-				switch (i) {
-					case 0: //	left Horiz
-//							camera.getWorldDirection(tempVector3);
-//				player.position.add(tempVector3.applyAxisAngle(YAxisRotation, -RADIANS_90_DEGREES).multiplyScalar(FLY_SPEED * a));
-						player.translateX(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
-	//							console.log('left horiz: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-						break;
-					case 1: //	left Vert
-//							camera.getWorldDirection(tempVector3);
-//				player.position.sub(tempVector3.multiplyScalar(FLY_SPEED * a));
-						player.translateZ(FLY_SPEED * a * (gamepad.buttons[1].pressed ? 2 : 1));
-	//							console.log('left vert: %d, %d, %d' + crosshair.position.x, crosshair.position.y, crosshair.position.z);
-						break;
-					case 2: //	right Horiz
-							player.rotateY(-MAX_ROT_RADIANS * a);
-						break;
-					case 5: //	right Vert
-							player.rotateX(MAX_ROT_RADIANS * a);
-						break;
-					default:
-						break;
-				}
-			}
-		});
-			
-		gamepad.buttons.forEach((b, i) => {
-			if (b.pressed) {
-				switch (i) {
-					case 0:	//	square
-						break;
-					case 1:	//	x
-//						if (b.pressed) {
-//								player.translateZ(-FLY_SPEED * 4);
-//						}
-						break;
-					case 2:	//	circle
-						break;
-					case 3:	//	triangle
-						break;
-					case 4:	//	left 2
-//							camera.getWorldDirection(tempVector3);
-//							player.rotateOnWorldAxis(tempVector3, MAX_ROT_RADIANS);
-							player.rotateZ(-MAX_ROT_RADIANS);
-						break;
-					case 5:	//	right 2
-//							camera.getWorldDirection(tempVector3);
-//							player.rotateOnWorldAxis(tempVector3, -MAX_ROT_RADIANS);
-							player.rotateZ(MAX_ROT_RADIANS);
-						break;
-					case 6:	//	left trigger
-						break;
-					case 7:	//	right trigger
-					default:
-						break;
-				}
-			}
-		});
-	}
 	
 	let rayOrigin = new THREE.Vector3(0, 0, 2);
 	let raycaster = new THREE.Raycaster();
@@ -538,11 +230,11 @@
 	function render() {
 //		points.rotateY(0.001);
 		if (gamepad) {
-			if (renderer.vr && renderer.vr.isPresenting()) {
-				vrModePlayerControls();
-			} else {
-				nonVrModePlayerControls();
-			}
+//			if (renderer.vr && renderer.vr.isPresenting()) {
+				gamepad.update(player, camera);
+//			} else {
+//				nonVrModePlayerControls();
+//			}
 		}
 			
 		if (myball.visible) {
@@ -564,8 +256,6 @@
 			let a = hit.object.geometry.getAttribute('position');
 			let c = hit.object.geometry.getAttribute('color');
 			let txt = W2VDATA[hit.index][0];
-			
-			hud.addLabel(hit.index);
 			
 			if (gamepad) {
 				if (gamepad.buttons[2].pressed) {
