@@ -4,6 +4,7 @@ import zipfile
 import datetime
 import urllib.request
 import os.path
+import re
 import matplotlib.pyplot as plt
 from umap import UMAP # actually called "umap-learn"
 from sklearn.decomposition import PCA
@@ -30,18 +31,21 @@ def downloadGoogleModel(url):
         downloadFile(url)
     return zipname
 
-# fasttext models come from https://fasttext.cc/docs/en/english-vectors.html
-# they are text format and .zip encoded. the gensim library can't read these directly so need to unzip.
+# fasttext models come from https://fasttext.cc/docs/en/english-vectors.html or
+# from https://github.com/facebookresearch/fastText/blob/master/pretrained-vectors.md
+# and they are text format and may be .zip encoded. the gensim library can't read these directly so need to unzip.
 def downloadFastTextModel(url):
     zipname = url.rpartition('/')[2]
-    fname = zipname.rpartition('.')[0]
+    iszip = not re.search('\\.(gz|zip)$', zipname) is None
+    fname = zipname.rpartition('.')[0] if iszip else zipname
 
     if (not os.path.isfile(fname)):
         if (not os.path.isfile(zipname)):
             log(f'Downloading model from {url}')
             downloadFile(url)
         log(f'Unzipping local model archive {zipname}')
-        unzip(zipname)
+        if (iszip):
+            unzip(zipname)
 
     return fname
 
@@ -70,6 +74,14 @@ def sampleVectors(vectors, size_frac):
         sampVecs[i] = vectors[val]
     return sampVecs, indices
 
+def topNVectors(vectors, n):
+    numFeat = len(vectors[0])
+    topVecs = np.ndarray((n, numFeat), np.float32)
+    indices = np.arange(start=0, stop=n, dtype=np.int32)
+    for i, val in enumerate(indices):
+        topVecs[i] = vectors[val]
+    return topVecs, indices
+
 def reduceWithPCA(vectors, size):
     log(f'Reducing data to {size} features using PCA (fast)')
     pca = PCA(n_components=size)
@@ -97,7 +109,6 @@ def PCA_then_UMAP(vectors, pca_size, umap_size):
 
     return umapVecs
 
-
 def PCA_then_TSNE(vectors, pca_size, tsne_size):
     pcaVecs = reduceWithPCA(vectors, pca_size)
     tsneVecs = reduceWithTSNE(pcaVecs, tsne_size)
@@ -120,7 +131,7 @@ def saveAsGraphitFile(model, vectors, indices, clusters, fname):
         if len(kw) > 1:
             v = vectors[i]
             f.write('["')
-            f.write(kw.replace('"', '\\"'))  # keyword
+            f.write(kw.replace("\\", "\\\\").replace('"', '\\"'))  # keyword
             f.write('",')
             f.write(str(v[0]))  # x
             f.write(',')
@@ -148,15 +159,18 @@ MODELS = [
     'https://s3-us-west-1.amazonaws.com/fasttext-vectors/wiki-news-300d-1M.vec.zip',
     'https://s3-us-west-1.amazonaws.com/fasttext-vectors/wiki-news-300d-1M-subword.vec.zip',
     'https://s3-us-west-1.amazonaws.com/fasttext-vectors/crawl-300d-2M.vec.zip',
-    'https://s3-us-west-1.amazonaws.com/fasttext-vectors/crawl-300d-2M-subword.zip'
+    'https://s3-us-west-1.amazonaws.com/fasttext-vectors/crawl-300d-2M-subword.zip',
+	'https://s3-us-west-1.amazonaws.com/fasttext-vectors/wiki.en.vec'
 ]
 
 # main
-url = MODELS[1]
+url = MODELS[5]
 model, fname = loadModel(url)
-vectors, indices = sampleVectors(model.vectors, 0.40)
-vectors = PCA_then_UMAP(vectors, 50, 3)
-clusters = clusterForColour(vectors, 10)
-fname = saveAsGraphitFile(model, vectors, indices, clusters, './keyword-data.js')
+#vectors, indices = sampleVectors(model.vectors, 0.50)
+vectors, indices = topNVectors(model.vectors, 500000)
+#vectors = PCA_then_UMAP(vectors, 50, 3)
+vectors = reduceWithPCA(vectors, 3)
+clusters = clusterForColour(vectors, 50)
+fname = saveAsGraphitFile(model, vectors, indices, clusters, './pca-keyword-data.js')
 
 log(f'Finished, now open graphit.html')
